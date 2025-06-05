@@ -25,6 +25,8 @@ public class Product {
         this.modified_date = modified_date;
     }
 
+    public Product(int productId, String name, int quantity, String supplier, double price) {
+    }
 
 
     public int getProduct_id() {

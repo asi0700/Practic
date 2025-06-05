@@ -134,6 +134,27 @@ public class ProductDAO implements AutoCloseable {
         }
     }
 
+
+    public List<Product> getLowStockProducts(int threshold) throws SQLException {
+        List<Product> lowStockProducts = new ArrayList<>();
+        String sql = "SELECT product_id, name, quantity, price, supplier FROM Products WHERE quantity < ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, threshold);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Product p = new Product(
+                        rs.getInt("product_id"),
+                        rs.getString("name"),
+                        rs.getInt("quantity"),
+                        rs.getString("supplier"),
+                        rs.getDouble("price")
+                );
+                lowStockProducts.add(p);
+            }
+        }
+        return lowStockProducts;
+    }
+
     @Override
     public void close() throws SQLException {
         if (connection != null && !connection.isClosed()) {

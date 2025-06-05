@@ -101,7 +101,7 @@ public class registration extends JFrame {
                 if ("admin".equalsIgnoreCase(registeredUser.getRole())) {
                     new AdminWindow(registeredUser).setVisible(true);
                 } else {
-                    new MainWindow(registeredUser).setVisible(true);
+                    new ClientWindow(registeredUser).setVisible(true);
                 }
             }
         } catch (SQLException e) {

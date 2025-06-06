@@ -155,6 +155,16 @@ public class ProductDAO implements AutoCloseable {
         return lowStockProducts;
     }
 
+
+    public void updateProductQuantity(int productId, int newQuantity) throws SQLException {
+        String sql = "UPDATE Products SET quantity = ? WHERE product_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, newQuantity);
+            stmt.setInt(2, productId);
+            stmt.executeUpdate();
+        }
+    }
+
     @Override
     public void close() throws SQLException {
         if (connection != null && !connection.isClosed()) {

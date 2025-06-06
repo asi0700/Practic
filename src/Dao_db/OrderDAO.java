@@ -81,6 +81,55 @@ public class OrderDAO {
     }
 
 
+    public List<Object[]> getOrdersByStatus(String status) throws SQLException {
+        List<Object[]> orders = new ArrayList<>();
+        String sql = "SELECT o.order_id, u.name, o.order_date, o.status " +
+                "FROM Orders o " +
+                "JOIN Users u ON o.client_id = u.user_id " +
+                "WHERE o.status = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, status);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Object[] order = new Object[4];
+                order[0] = rs.getInt("order_id");
+                order[1] = rs.getString("name");
+                order[2] = rs.getString("order_date");
+                order[3] = rs.getString("status");
+                orders.add(order);
+            }
+        }
+        return orders;
+    }
+
+    public void updateOrderStatus(int orderId, String status) throws SQLException {
+        String sql = "UPDATE Orders SET status = ?, last_updated = DATETIME('now') WHERE order_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, status);
+            stmt.setInt(2, orderId);
+            stmt.executeUpdate();
+        }
+    }
+
+    public List<Object[]> getAllOrders() throws SQLException {
+        List<Object[]> orders = new ArrayList<>();
+        String sql = "SELECT o.order_id, u.name, o.order_date, o.status, o.total_cost " +
+                "FROM Orders o JOIN Users u ON o.client_id = u.user_id";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                Object[] order = new Object[5];
+                order[0] = rs.getInt("order_id");
+                order[1] = rs.getString("name");
+                order[2] = rs.getString("order_date");
+                order[3] = rs.getString("status");
+                order[4] = rs.getDouble("total_cost");
+                orders.add(order);
+            }
+        }
+        return orders;
+    }
+
 
 }
 

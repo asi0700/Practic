@@ -126,11 +126,15 @@ public class OrderDAO {
                 order[4] = rs.getDouble("total_cost");
                 orders.add(order);
             }
+
         }
         return orders;
     }
 
 
 }
+
+
+
 
 

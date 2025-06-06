@@ -19,11 +19,11 @@ public class LoginWindow extends JFrame {
     public LoginWindow() {
         setTitle("Вход - Склад-Мастер");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        setSize(300, 250);
+        setSize(400, 250);
         setLocationRelativeTo(null);
 
         JPanel panel = new JPanel(new GridLayout(4, 2, 10, 10));
-        panel.add(new JLabel("Имя пользователя:"));
+        panel.add(new JLabel("Имя пользователя: Глеб гей"));
         usernameField = new JTextField(15);
         panel.add(usernameField);
 

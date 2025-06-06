@@ -7,6 +7,7 @@ import java.awt.event.ActionEvent;
 import java.sql.SQLException;
 import java.util.List;
 
+import Dao_db.OrderDAO;
 import Dao_db.ProductDAO;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
@@ -20,6 +21,8 @@ public class AdminWindow extends JFrame {
     private JTextField searchField;
     private JButton searchButton;
     private User user;
+    private OrdersWindow ordersWindow;
+    private JTable ordersTable;
 
     public AdminWindow(User user) {
         if (user == null) {
@@ -42,7 +45,7 @@ public class AdminWindow extends JFrame {
 
         cards.add(createDashboardPanel(), "DASHBOARD");
         cards.add(createProductsPanel(), "PRODUCTS");
-        cards.add(createOrdersPanel(), "ORDERS");
+        //cards.add(openOrderWindow(), "");
 
         add(cards, BorderLayout.CENTER);
 
@@ -53,9 +56,18 @@ public class AdminWindow extends JFrame {
         setJMenuBar(new CommonMenuBar(
                 e -> dispose(), // Выход
                 e -> cardLayout.show(cards, "PRODUCTS"), // Товары
-                e -> cardLayout.show(cards, "ORDERS") // Заказы
+                e -> openOrderWindow() // Заказы
         ));
     }
+
+    public void openOrderWindow() {
+       OrdersWindow ordersWindow = new OrdersWindow(user);
+       ordersWindow.setVisible(true);
+
+    }
+
+
+
 
     private JPanel createDashboardPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -123,6 +135,9 @@ public class AdminWindow extends JFrame {
         return panel;
     }
 
+
+
+
     private Object[][] loadProductsFromDB() {
         return loadProductsFromDB(null, null, null, null, null, null, null);
     }
@@ -161,16 +176,23 @@ public class AdminWindow extends JFrame {
             throw new RuntimeException(e);
         }
     }
+//    private JPanel createOrdersPanel() {
+//        JPanel panel = new JPanel(new BorderLayout());
+//        JLabel title = new JLabel("Управление заказами",SwingConstants.CENTER);
+//        title.setFont(title.getFont().deriveFont(title.getFont().getSize()-1f));
+//        panel.add(title, BorderLayout.NORTH);
+//        panel.add(new JLabel("Ф", SwingConstants.CENTER), BorderLayout.CENTER);
+//        return panel;
+//    }
 
-    private JPanel createOrdersPanel() {
+    public void setOrdersWindow(OrderDAO orderDAO) {
         JPanel panel = new JPanel(new BorderLayout());
         JLabel title = new JLabel("Управление заказами", SwingConstants.CENTER);
         title.setFont(new Font("Arial", Font.BOLD, 20));
         panel.add(title, BorderLayout.NORTH);
+        OrdersWindow ordersWindow = new OrdersWindow(user);
+        ordersWindow.setVisible(true);
 
-        panel.add(new JLabel("Функционал заказов в разработке"), BorderLayout.CENTER);
-
-        return panel;
     }
 
     private JPanel createStatCard(String title, String value) {

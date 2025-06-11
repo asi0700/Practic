@@ -99,9 +99,9 @@ public class registration extends JFrame {
                 dispose();
                 System.out.println("Роль зарегистрированного пользователя: " + registeredUser.getRole());
                 if ("admin".equalsIgnoreCase(registeredUser.getRole())) {
-                    new AdminWindow(registeredUser).setVisible(true);
+                    openAdminWindow(registeredUser);
                 } else {
-                    new ClientWindow(registeredUser).setVisible(true);
+                    openClientWindow(registeredUser);
                 }
             }
         } catch (SQLException e) {
@@ -144,5 +144,21 @@ public class registration extends JFrame {
         nameField.setText("");
         phoneField.setText("");
         addressField.setText("");
+    }
+
+    private void openAdminWindow(User newUser) {
+        AdminWindow adminWindow = new AdminWindow(newUser, null); // Передаем null для MainWindow, если его нет
+        adminWindow.setVisible(true);
+        dispose();
+    }
+
+    private void openClientWindow(User newUser) {
+        try {
+            ClientWindow clientWindow = new ClientWindow(newUser, null); // Передаем null для MainWindow, если его нет
+            clientWindow.setVisible(true);
+            dispose();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка при открытии окна клиента: " + e.getMessage());
+        }
     }
 }

@@ -4,15 +4,24 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.io.BufferedWriter;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Date;
 import java.util.List;
 
-import Dao_db.OrderDAO;
 import Dao_db.ProductDAO;
 import Dao_db.AddUser;
+import Dao_db.OrderDAO;
 import DBobject.DBmanager;
 import model.Product;
 import model.User;
+import ui.LoginWindow;
+import ui.MainWindow;
 
 public class AdminWindow extends JFrame {
     private JPanel cards;
@@ -23,51 +32,61 @@ public class AdminWindow extends JFrame {
     private User user;
     private OrdersWindow ordersWindow;
     private JTable ordersTable;
+    private User currentUser;
+    private OrderDAO orderDAO;
+    private MainWindow mainWindow;
+    private ProductDAO productDAO; // Добавляем объявление переменной
 
-    public AdminWindow(User user) {
+    public AdminWindow(User user, MainWindow mainWindow) {
         if (user == null) {
             throw new IllegalArgumentException("Пользователь не может быть null");
         }
-        this.user = user;
+        this.currentUser = user;
+        this.mainWindow = mainWindow;
         initializeUI();
     }
 
+    public AdminWindow(User user) {
+        this(user, null);
+    }
+
     private void initializeUI() {
-        setTitle("Управление складом");
-        setSize(1000, 600);
+        setTitle("Администратор - Склад-Мастер");
+        setSize(800, 600);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
+
+        // Инициализация DAO для работы с заказами
+        try {
+            orderDAO = new OrderDAO(DBmanager.getConnection());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
+            System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
+        }
 
         cardLayout = new CardLayout();
         cards = new JPanel(cardLayout);
 
-        createMenuBar();
-
+        // Добавляем панели для различных вкладок
         cards.add(createDashboardPanel(), "DASHBOARD");
         cards.add(createProductsPanel(), "PRODUCTS");
-        //cards.add(openOrderWindow(), "");
+        cards.add(createOrdersPanel(), "ORDERS"); // Добавляем панель заказов
 
-        add(cards, BorderLayout.CENTER);
+        add(cards);
+
+        createMenuBar();
 
         cardLayout.show(cards, "DASHBOARD");
     }
 
     private void createMenuBar() {
         setJMenuBar(new CommonMenuBar(
-                e -> dispose(), // Выход
+                e -> logout(), // Выход
                 e -> cardLayout.show(cards, "PRODUCTS"), // Товары
-                e -> openOrderWindow() // Заказы
+                e -> cardLayout.show(cards, "ORDERS"), // Заказы как панель, а не окно
+                e -> showLogsPanel() // Новый пункт для просмотра логов
         ));
     }
-
-    public void openOrderWindow() {
-       OrdersWindow ordersWindow = new OrdersWindow(user);
-       ordersWindow.setVisible(true);
-
-    }
-
-
-
 
     private JPanel createDashboardPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -135,8 +154,27 @@ public class AdminWindow extends JFrame {
         return panel;
     }
 
+    private JPanel createOrdersPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        JLabel label = new JLabel("Панель заказов", SwingConstants.CENTER);
+        label.setFont(new Font("Arial", Font.BOLD, 24));
+        panel.add(label, BorderLayout.NORTH);
 
+        // Здесь можно добавить таблицу заказов и другие элементы управления
+        ordersTable = new JTable();
+        JScrollPane scrollPane = new JScrollPane(ordersTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
+        // Кнопка возвращения к главному окну (опционально)
+        JButton backButton = new JButton("Вернуться к главному меню");
+        backButton.addActionListener(e -> returnToMainWindow());
+        panel.add(backButton, BorderLayout.SOUTH);
+
+        // Загрузка данных заказов (если есть метод загрузки)
+        loadOrdersData();
+
+        return panel;
+    }
 
     private Object[][] loadProductsFromDB() {
         return loadProductsFromDB(null, null, null, null, null, null, null);
@@ -151,7 +189,7 @@ public class AdminWindow extends JFrame {
                 Product product = products.get(i);
                 User addedByUser = addUser.findById(product.getAdded_by());
                 User modifiedByUser = addUser.findById(product.getModified_by());
-                data[i][0] = product.getProduct_id();
+                data[i][0] = product.getId(); // Fix the getter method name for product ID
                 data[i][1] = product.getName();
                 data[i][2] = product.getDescription() != null ? product.getDescription() : "";
                 data[i][3] = product.getQuantity();
@@ -175,24 +213,6 @@ public class AdminWindow extends JFrame {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-//    private JPanel createOrdersPanel() {
-//        JPanel panel = new JPanel(new BorderLayout());
-//        JLabel title = new JLabel("Управление заказами",SwingConstants.CENTER);
-//        title.setFont(title.getFont().deriveFont(title.getFont().getSize()-1f));
-//        panel.add(title, BorderLayout.NORTH);
-//        panel.add(new JLabel("Ф", SwingConstants.CENTER), BorderLayout.CENTER);
-//        return panel;
-//    }
-
-    public void setOrdersWindow(OrderDAO orderDAO) {
-        JPanel panel = new JPanel(new BorderLayout());
-        JLabel title = new JLabel("Управление заказами", SwingConstants.CENTER);
-        title.setFont(new Font("Arial", Font.BOLD, 20));
-        panel.add(title, BorderLayout.NORTH);
-        OrdersWindow ordersWindow = new OrdersWindow(user);
-        ordersWindow.setVisible(true);
-
     }
 
     private JPanel createStatCard(String title, String value) {
@@ -219,83 +239,60 @@ public class AdminWindow extends JFrame {
 
     private void showAddDialog() {
         JDialog dialog = new JDialog(this, "Добавить товар", true);
-        dialog.setLayout(new GridBagLayout());
-        dialog.setSize(450, 550);
+        dialog.setSize(300, 400);
+        dialog.setLayout(new GridLayout(6, 2));
 
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        JTextField[] fields = new JTextField[10];
-        String[] labels = {"ID:", "Наименование:", "Описание:", "Количество:", "Цена:", "Поставщик:", "Дата добавления:", "Кто добавил:", "Дата изменения:", "Кто изменил:"};
-
-        for (int i = 0; i < fields.length; i++) {
-            gbc.gridx = 0;
-            gbc.gridy = i;
-            dialog.add(new JLabel(labels[i]), gbc);
-
-            gbc.gridx = 1;
-            fields[i] = new JTextField(15);
-            if (i == 0) fields[i].setText("0"); // ID будет сгенерирован
-            if (i == 7 || i == 9) {
-                fields[i].setText(user.getName());
-                fields[i].setEditable(false);
-            }
-            dialog.add(fields[i], gbc);
-        }
+        JLabel nameLabel = new JLabel("Название:");
+        JTextField nameField = new JTextField();
+        JLabel descLabel = new JLabel("Описание:");
+        JTextField descField = new JTextField();
+        JLabel priceLabel = new JLabel("Цена:");
+        JTextField priceField = new JTextField();
+        JLabel quantityLabel = new JLabel("Количество:");
+        JTextField quantityField = new JTextField();
+        JLabel categoryLabel = new JLabel("Категория:");
+        JTextField categoryField = new JTextField();
 
         JButton saveButton = new JButton("Сохранить");
-        gbc.gridx = 1;
-        gbc.gridy = fields.length;
-        gbc.anchor = GridBagConstraints.EAST;
-        dialog.add(saveButton, gbc);
-
         saveButton.addActionListener(e -> {
+            // Validate product name is not empty
+            if (nameField.getText().trim().isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Название товара не может быть пустым.", "Ошибка ввода", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String name = nameField.getText();
+            String description = descField.getText();
             try {
-                Product product = new Product(
-                        0,
-                        fields[1].getText(), // name
-                        fields[2].getText(), // description
-                        Integer.parseInt(fields[3].getText()), // quantity
-                        Double.parseDouble(fields[4].getText()), // price
-                        fields[5].getText(), // supplier
-                        user.getUserid(),
-                        fields[6].getText(),
-                        user.getUserid(),
-                        fields[8].getText()
-                );
+                double price = Double.parseDouble(priceField.getText());
+                int quantity = Integer.parseInt(quantityField.getText());
+                String category = categoryField.getText();
 
-                try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
-                     AddUser addUser = new AddUser(DBmanager.getConnection())) {
-                    productDao.addProduct(product);
-                    User addedByUser = addUser.findById(product.getAdded_by());
-                    User modifiedByUser = addUser.findById(product.getModified_by());
-                    DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
-                    model.addRow(new Object[]{
-                            product.getProduct_id(),
-                            product.getName(),
-                            product.getDescription(),
-                            product.getQuantity(),
-                            product.getPrice(),
-                            product.getSupplier(),
-                            product.getAdded_date(),
-                            (addedByUser != null) ? addedByUser.getName() : "Неизвестно",
-                            product.getModified_date(),
-                            (modifiedByUser != null) ? modifiedByUser.getName() : "Неизвестно"
-                    });
+                Product newProduct = new Product(0, name, price, description, "");
+                try {
+                    ProductDAO productDAO = new ProductDAO(DBmanager.getConnection());
+                    productDAO.addProduct(newProduct);
+                    JOptionPane.showMessageDialog(dialog, "Товар успешно добавлен");
+                    loadProductsData();
+                    dialog.dispose();
                 } catch (SQLException ex) {
-                    System.err.println("Ошибка добавления товара: " + ex.getMessage());
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(this, "Ошибка добавления товара: " + ex.getMessage());
-                } catch (Exception ex) {
-                    throw new RuntimeException(ex);
+                    JOptionPane.showMessageDialog(dialog, "Ошибка при добавлении товара: " + ex.getMessage());
                 }
-
-                dialog.dispose();
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(dialog, "Пожалуйста, введите корректные числовые значения для количества и цены.");
+                JOptionPane.showMessageDialog(dialog, "Пожалуйста, введите корректные числовые значения для цены и количества");
             }
         });
+
+        dialog.add(nameLabel);
+        dialog.add(nameField);
+        dialog.add(descLabel);
+        dialog.add(descField);
+        dialog.add(priceLabel);
+        dialog.add(priceField);
+        dialog.add(quantityLabel);
+        dialog.add(quantityField);
+        dialog.add(categoryLabel);
+        dialog.add(categoryField);
+        dialog.add(saveButton);
 
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
@@ -325,7 +322,7 @@ public class AdminWindow extends JFrame {
         try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection())) {
             List<Product> products = productDao.getAllProducts();
             for (Product p : products) {
-                if (p.getProduct_id() == productId) {
+                if (p.getId() == productId) { // Fix the getter method name for product ID
                     originalProduct = p;
                     break;
                 }
@@ -358,17 +355,22 @@ public class AdminWindow extends JFrame {
         Product finalOriginalProduct = originalProduct;
         saveButton.addActionListener(e -> {
             try {
+                if (fields[1].getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "Product name cannot be empty.", "Input Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
                 Product product = new Product(
                         Integer.parseInt(fields[0].getText()),
                         fields[1].getText(),
-                        fields[2].getText(),
-                        Integer.parseInt(fields[3].getText()),
                         Double.parseDouble(fields[4].getText()),
+                        fields[2].getText(),
+                        0, // Placeholder for categoryId
+                        Integer.parseInt(fields[3].getText()),
                         fields[5].getText(),
                         finalOriginalProduct != null ? finalOriginalProduct.getAdded_by() : user.getUserid(),
                         fields[6].getText(),
                         user.getUserid(),
-                        fields[8].getText()
+                        fields[7].getText()
                 );
 
                 try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
@@ -376,7 +378,7 @@ public class AdminWindow extends JFrame {
                     productDao.updateProduct(product);
                     User addedByUser = addUser.findById(product.getAdded_by());
                     User modifiedByUser = addUser.findById(product.getModified_by());
-                    model.setValueAt(product.getProduct_id(), selectedRow, 0);
+                    model.setValueAt(product.getId(), selectedRow, 0); // Fix the getter method name for product ID
                     model.setValueAt(product.getName(), selectedRow, 1);
                     model.setValueAt(product.getDescription(), selectedRow, 2);
                     model.setValueAt(product.getQuantity(), selectedRow, 3);
@@ -550,6 +552,16 @@ public class AdminWindow extends JFrame {
         }
     }
 
+    private void returnToMainWindow() {
+        if (mainWindow == null) {
+            mainWindow = new MainWindow(currentUser);
+        }
+        mainWindow.setVisible(true);
+        mainWindow.showNavigation();
+        dispose();
+        System.out.println("Returning to MainWindow with admin navigation shown");
+    }
+
     private void openExitWindow() {
         dispose();
     }
@@ -625,5 +637,132 @@ public class AdminWindow extends JFrame {
 
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
+    }
+
+    private void loadOrdersData() {
+        if (orderDAO == null) {
+            JOptionPane.showMessageDialog(this, "OrderDAO не инициализирован. Проверьте подключение к базе данных.");
+            try {
+                orderDAO = new OrderDAO(DBmanager.getConnection());
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
+                System.err.println("Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
+            }
+            return;
+        }
+
+        try {
+            List<Object[]> orders = orderDAO.getAllOrders();
+            DefaultTableModel model = new DefaultTableModel();
+            model.setColumnIdentifiers(new Object[]{"ID", "Дата", "Статус", "Клиент"});
+
+            for (Object[] order : orders) {
+                model.addRow(new Object[]{
+                    order[0], // ID
+                    order[1], // Дата
+                    order[2], // Статус
+                    order[3]  // Клиент
+                });
+            }
+
+            ordersTable.setModel(model);
+            System.out.println("Данные заказов загружены: " + orders.size() + " записей");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных заказов: " + e.getMessage());
+            System.err.println("Ошибка загрузки данных заказов: " + e.getMessage());
+        }
+    }
+
+    private void loadProductsData() {
+        try {
+            if (productDAO == null) {
+                productDAO = new ProductDAO(DBmanager.getConnection());
+            }
+            List<Product> products = productDAO.getAllProducts();
+            DefaultTableModel model = new DefaultTableModel();
+            model.setColumnIdentifiers(new Object[]{"ID", "Название", "Описание", "Количество", "Цена"});
+
+            for (Product product : products) {
+                model.addRow(new Object[]{
+                    product.getId(), // Fix the getter method name for product ID
+                    product.getName(),
+                    product.getDescription(),
+                    product.getQuantity(),
+                    product.getPrice()
+                });
+            }
+
+            productsTable.setModel(model);
+            System.out.println("Данные товаров загружены: " + products.size() + " записей");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных товаров: " + e.getMessage());
+            System.err.println("Ошибка загрузки данных товаров: " + e.getMessage());
+        }
+    }
+
+    private void logout() {
+        JOptionPane.showMessageDialog(this, "Войдите в свой аккаунт");
+        dispose();
+        new LoginWindow().setVisible(true);
+        logAction("Admin logged out: " + currentUser.getUsername());
+    }
+
+    private void logAction(String action) {
+        try {
+            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
+            File logFile = new File(logFilePath);
+            if (!logFile.exists()) {
+                logFile.getParentFile().mkdirs();
+                logFile.createNewFile();
+            }
+            FileWriter fw = new FileWriter(logFile, true);
+            BufferedWriter bw = new BufferedWriter(fw);
+            bw.write(new Date().toString() + " - " + action);
+            bw.newLine();
+            bw.close();
+        } catch (IOException e) {
+            System.err.println("Ошибка при записи в лог: " + e.getMessage());
+        }
+    }
+
+    private void showLogsPanel() {
+        JDialog logsDialog = new JDialog(this, "Логи действий", true);
+        logsDialog.setSize(600, 400);
+        logsDialog.setLayout(new BorderLayout());
+
+        JTextArea logsArea = new JTextArea();
+        logsArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(logsArea);
+        logsDialog.add(scrollPane, BorderLayout.CENTER);
+
+        JButton refreshButton = new JButton("Обновить");
+        refreshButton.addActionListener(e -> loadLogs(logsArea));
+        logsDialog.add(refreshButton, BorderLayout.SOUTH);
+
+        loadLogs(logsArea);
+        logsDialog.setLocationRelativeTo(this);
+        logsDialog.setVisible(true);
+    }
+
+    private void loadLogs(JTextArea logsArea) {
+        try {
+            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
+            File logFile = new File(logFilePath);
+            if (logFile.exists()) {
+                BufferedReader br = new BufferedReader(new FileReader(logFile));
+                StringBuilder logs = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) {
+                    logs.append(line).append("\n");
+                }
+                br.close();
+                logsArea.setText(logs.toString());
+            } else {
+                logsArea.setText("Лог-файл не найден.");
+            }
+        } catch (IOException e) {
+            logsArea.setText("Ошибка при чтении логов: " + e.getMessage());
+            System.err.println("Ошибка при чтении логов: " + e.getMessage());
+        }
     }
 }

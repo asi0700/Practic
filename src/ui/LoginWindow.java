@@ -6,7 +6,6 @@ import java.sql.SQLException;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
-import ui.ClientWindow;
 import model.User;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
@@ -45,33 +44,48 @@ public class LoginWindow extends JFrame {
     private void login() {
         String username = usernameField.getText();
         String password = new String(passwordField.getPassword());
+        User user = authenticateUser(username, password);
+        if (user != null) {
+            MainWindow mainWindow = new MainWindow(user);
+            mainWindow.setVisible(true);
+            if ("admin".equalsIgnoreCase(user.getRole())) {
+                new AdminWindow(user).setVisible(true);
+                mainWindow.setVisible(false);
+            } else if ("client".equalsIgnoreCase(user.getRole())) {
+                try {
+                    new ClientWindow(user, mainWindow).setVisible(true);
+                    mainWindow.setVisible(false);
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Ошибка при открытии окна клиента: " + e.getMessage());
+                }
+            } else if ("worker".equalsIgnoreCase(user.getRole())) {
+                // Здесь можно добавить окно для работника
+                JOptionPane.showMessageDialog(this, "Окно для роли работника пока не реализовано");
+            }
+            dispose();
+        } else {
+            JOptionPane.showMessageDialog(this, "Неверное имя пользователя или пароль");
+        }
+    }
+
+    private User authenticateUser(String username, String password) {
         String hashedPassword = hashPassword(password);
 
         try (AddUser userDao = new AddUser(DBmanager.getConnection())) {
             User user = userDao.findByUsername(username);
-            if (user == null) {
-                JOptionPane.showMessageDialog(this, "Пользователь с именем " + username + " не найден!");
-                return;
-            }
-
-            if (user.getPassword().equals(hashedPassword)) {
-                JOptionPane.showMessageDialog(this, "Вход успешный! Добро пожаловать, " + user.getName() + "!");
-                dispose();
-
+            if (user != null && user.getPassword().equals(hashedPassword)) {
+                System.out.println("Вход успешен для пользователя: " + user.getUsername());
                 System.out.println("Роль пользователя: " + user.getRole());
-
-                if ("admin".equalsIgnoreCase(user.getRole())) {
-                    new AdminWindow(user).setVisible(true);
-                } else {
-                    new ClientWindow(user).setVisible(true);
-                }
+                return user;
             } else {
-                JOptionPane.showMessageDialog(this, "Неверный пароль!");
+                return null;
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Ошибка базы данных: " + e.getMessage());
+            return null;
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Ошибка при закрытии ресурса: " + e.getMessage());
+            return null;
         }
     }
 
@@ -96,11 +110,4 @@ public class LoginWindow extends JFrame {
         registrationWindow.setVisible(true);
         dispose();
     }
-
-
-//    public static void main(String[] args) {
-//        SwingUtilities.invokeLater(() -> {
-//            new LoginWindow().setVisible(true);
-//        });
-//    }
 }

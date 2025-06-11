@@ -29,7 +29,7 @@ public class ProductDAO implements AutoCloseable {
 
             ResultSet rs = stmt.getGeneratedKeys();
             if (rs.next()) {
-                product.setProduct_id(rs.getInt(1));
+                product.setId(rs.getInt(1));
             }
         } catch (SQLException e) {
             System.out.println("Ошибка при добавлении товара: " + e.getMessage());
@@ -49,7 +49,7 @@ public class ProductDAO implements AutoCloseable {
             stmt.setString(7, product.getAdded_date());
             stmt.setInt(8, product.getModified_by());
             stmt.setString(9, product.getModified_date());
-            stmt.setInt(10, product.getProduct_id());
+            stmt.setInt(10, product.getId());
             stmt.executeUpdate();
         } catch (SQLException e) {
             System.err.println("Ошибка при обновлении товара: " + e.getMessage());
@@ -77,9 +77,10 @@ public class ProductDAO implements AutoCloseable {
                 products.add(new Product(
                         rs.getInt("product_id"),
                         rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getInt("quantity"),
                         rs.getDouble("price"),
+                        rs.getString("description"),
+                        0, // Placeholder for categoryId as it might not be in the result set or schema
+                        rs.getInt("quantity"),
                         rs.getString("supplier"),
                         rs.getInt("added_by"),
                         rs.getString("added_date"),
@@ -120,9 +121,10 @@ public class ProductDAO implements AutoCloseable {
                 products.add(new Product(
                         rs.getInt("product_id"),
                         rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getInt("quantity"),
                         rs.getDouble("price"),
+                        rs.getString("description"),
+                        0, // Placeholder for categoryId
+                        rs.getInt("quantity"),
                         rs.getString("supplier"),
                         rs.getInt("added_by"),
                         rs.getString("added_date"),
@@ -145,9 +147,9 @@ public class ProductDAO implements AutoCloseable {
                 Product p = new Product(
                         rs.getInt("product_id"),
                         rs.getString("name"),
-                        rs.getInt("quantity"),
-                        rs.getString("supplier"),
-                        rs.getDouble("price")
+                        rs.getDouble("price"),
+                        "", // Placeholder for description as it's not in the result set
+                        rs.getString("supplier")
                 );
                 lowStockProducts.add(p);
             }
@@ -163,6 +165,25 @@ public class ProductDAO implements AutoCloseable {
             stmt.setInt(2, productId);
             stmt.executeUpdate();
         }
+    }
+
+    public Product getProductById(int id) throws SQLException {
+        String sql = "SELECT product_id, name, price, description, supplier FROM products WHERE product_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Product(
+                        rs.getInt("product_id"),
+                        rs.getString("name"),
+                        rs.getDouble("price"),
+                        rs.getString("description"),
+                        rs.getString("supplier")
+                    );
+                }
+            }
+        }
+        return null;
     }
 
     @Override

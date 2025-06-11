@@ -4,8 +4,13 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +18,7 @@ import java.util.List;
 import Dao_db.OrderDAO;
 import Dao_db.ProductDAO;
 import DBobject.DBmanager;
+import model.Order;
 import model.Product;
 import model.User;
 
@@ -23,10 +29,17 @@ public class ClientWindow extends JFrame {
     private JTable productsTable, ordersTable, cartTable;
     private JTextField searchField;
     private List<Object[]> cart = new ArrayList<>(); // Корзина: [product_id, name, quantity, price]
+    private OrderDAO orderDAO;
+    private MainWindow mainWindow;
+
+    public ClientWindow(User user, MainWindow mainWindow) throws SQLException {
+        this.currentUser = user;
+        this.mainWindow = mainWindow;
+        initializeUI();
+    }
 
     public ClientWindow(User user) throws SQLException {
-        this.currentUser = user;
-        initializeUI();
+        this(user, null);
     }
 
     private void initializeUI() throws SQLException {
@@ -34,6 +47,13 @@ public class ClientWindow extends JFrame {
         setSize(1000, 600);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
+
+        try {
+            orderDAO = new OrderDAO(DBmanager.getConnection());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
+            System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
+        }
 
         cardLayout = new CardLayout();
         cards = new JPanel(cardLayout);
@@ -59,7 +79,10 @@ public class ClientWindow extends JFrame {
         JMenuItem productsItem = new JMenuItem("Товары");
         productsItem.addActionListener(e -> cardLayout.show(cards, "PRODUCTS"));
         JMenuItem ordersItem = new JMenuItem("Мои заказы");
-        ordersItem.addActionListener(e -> cardLayout.show(cards, "ORDERS"));
+        ordersItem.addActionListener(e -> {
+            cardLayout.show(cards, "ORDERS");
+            loadOrdersData();
+        });
         JMenuItem cartItem = new JMenuItem("Корзина");
         cartItem.addActionListener(e -> cardLayout.show(cards, "CART"));
 
@@ -69,14 +92,15 @@ public class ClientWindow extends JFrame {
         navMenu.add(cartItem);
 
         JMenuItem exitItem = new JMenuItem("Выйти в главное меню");
-        exitItem.addActionListener(e -> {
-            this.dispose();
-            new ui.LoginWindow().setVisible(true);
-        });
+        exitItem.addActionListener(e -> returnToMainWindow());
+
+        JMenuItem logoutItem = new JMenuItem("Выйти из аккаунта");
+        logoutItem.addActionListener(e -> logout());
 
         menuBar.add(navMenu);
         menuBar.add(Box.createHorizontalGlue());
         menuBar.add(exitItem);
+        menuBar.add(logoutItem);
 
         setJMenuBar(menuBar);
     }
@@ -153,7 +177,7 @@ public class ClientWindow extends JFrame {
         Object[][] data = new Object[products.size()][6];
         for (int i = 0; i < products.size(); i++) {
             Product p = products.get(i);
-            data[i][0] = p.getProduct_id();
+            data[i][0] = p.getId(); // Changed from getProduct_id() to getId()
             data[i][1] = p.getName();
             data[i][2] = p.getQuantity();
             data[i][3] = p.getPrice();
@@ -237,59 +261,21 @@ public class ClientWindow extends JFrame {
         return panel;
     }
 
-    private JPanel createOrdersPanel() throws SQLException {
+    private JPanel createOrdersPanel() {
         JPanel panel = new JPanel(new BorderLayout());
+        JLabel label = new JLabel("Мои заказы", SwingConstants.CENTER);
+        label.setFont(new Font("Arial", Font.BOLD, 24));
+        panel.add(label, BorderLayout.NORTH);
 
-        JLabel title = new JLabel("Мои заказы", SwingConstants.CENTER);
-        title.setFont(new Font("Arial", Font.BOLD, 20));
-        panel.add(title, BorderLayout.NORTH);
+        ordersTable = new JTable();
+        JScrollPane scrollPane = new JScrollPane(ordersTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
-        OrderDAO orderDao = new OrderDAO(DBmanager.getConnection());
-        List<Object[]> orders;
-        try {
-            orders = orderDao.getClientOrders(currentUser.getUserid());
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка загрузки заказов: " + e.getMessage());
-            orders = new ArrayList<>();
-        }
+        JButton refreshButton = new JButton("Обновить");
+        refreshButton.addActionListener(e -> loadOrdersData());
+        panel.add(refreshButton, BorderLayout.SOUTH);
 
-        String[] columnNames = {"ID заказа", "Дата", "Статус"};
-        Object[][] data = new Object[orders.size()][3];
-        for (int i = 0; i < orders.size(); i++) {
-            data[i][0] = orders.get(i)[0]; // order_id
-            data[i][1] = orders.get(i)[1]; // order_date
-            data[i][2] = orders.get(i)[2]; // status
-        }
-
-        DefaultTableModel model = new DefaultTableModel(data, columnNames) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-
-        ordersTable = new JTable(model);
-        panel.add(new JScrollPane(ordersTable), BorderLayout.CENTER);
-
-        JButton detailsButton = new JButton("Посмотреть детали");
-        detailsButton.addActionListener(e -> {
-            int row = ordersTable.getSelectedRow();
-            if (row >= 0) {
-                int orderId = (int) ordersTable.getValueAt(row, 0);
-                try {
-                    List<Object[]> items = orderDao.getOrderItems(orderId);
-                    StringBuilder details = new StringBuilder("<html><b>Товары в заказе:</b><br>");
-                    for (Object[] item : items) {
-                        details.append(item[0]).append(" (Кол-во: ").append(item[1]).append(", Цена: ").append(item[2]).append(")<br>");
-                    }
-                    details.append("</html>");
-                    JOptionPane.showMessageDialog(this, details.toString(), "Детали заказа", JOptionPane.INFORMATION_MESSAGE);
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(this, "Ошибка загрузки деталей: " + ex.getMessage());
-                }
-            }
-        });
-        panel.add(detailsButton, BorderLayout.SOUTH);
+        loadOrdersData();
 
         return panel;
     }
@@ -429,7 +415,7 @@ public class ClientWindow extends JFrame {
             products = productDao.getAllProducts();
             for (Product p : products) {
                 model.addRow(new Object[]{
-                        p.getProduct_id(),
+                        p.getId(), // Changed from getProduct_id() to getId()
                         p.getName(),
                         p.getQuantity(),
                         p.getPrice(),
@@ -440,6 +426,74 @@ public class ClientWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "Данные успешно обновлены", "Обновление", JOptionPane.INFORMATION_MESSAGE);
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Ошибка обновления данных: " + e.getMessage());
+        }
+    }
+
+    private void loadOrdersData() {
+        if (orderDAO == null) {
+            JOptionPane.showMessageDialog(this, "OrderDAO не инициализирован. Проверьте подключение к базе данных.");
+            try {
+                orderDAO = new OrderDAO(DBmanager.getConnection());
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
+                System.err.println("Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
+            }
+            return;
+        }
+
+        try {
+            // Загружаем заказы только для текущего пользователя
+            List<Order> orders = orderDAO.getOrdersByClientId(currentUser.getUserid());
+            DefaultTableModel model = new DefaultTableModel();
+            model.setColumnIdentifiers(new Object[]{"ID", "Дата", "Статус"});
+
+            for (Order order : orders) {
+                model.addRow(new Object[]{
+                    order.getId(),
+                    order.getOrderDate(),
+                    order.getStatus()
+                });
+            }
+
+            ordersTable.setModel(model);
+            System.out.println("Данные заказов клиента загружены: " + orders.size() + " записей");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных заказов: " + e.getMessage());
+            System.err.println("Ошибка загрузки данных заказов: " + e.getMessage());
+        }
+    }
+
+    private void returnToMainWindow() {
+        if (mainWindow == null) {
+            mainWindow = new MainWindow(currentUser);
+        }
+        mainWindow.setVisible(true);
+        mainWindow.showNavigation();
+        dispose();
+    }
+
+    private void logout() {
+        JOptionPane.showMessageDialog(this, "Войдите в свой аккаунт");
+        dispose();
+        new LoginWindow().setVisible(true);
+        logAction("Client logged out: " + currentUser.getUsername());
+    }
+
+    private void logAction(String action) {
+        try {
+            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
+            java.io.File logFile = new java.io.File(logFilePath);
+            if (!logFile.exists()) {
+                logFile.getParentFile().mkdirs();
+                logFile.createNewFile();
+            }
+            FileWriter fw = new FileWriter(logFile, true);
+            BufferedWriter bw = new BufferedWriter(fw);
+            bw.write(new java.util.Date().toString() + " - " + action);
+            bw.newLine();
+            bw.close();
+        } catch (IOException e) {
+            System.err.println("Ошибка при записи в лог: " + e.getMessage());
         }
     }
 }

@@ -1,23 +1,33 @@
 package model;
 
 public class Product {
-    private int product_id;
+    private int id;
     private String name;
-    private String description;
-    private int quantity;
     private double price;
+    private String description;
+    private int categoryId;
+    private int quantity;
     private String supplier;
     private int added_by;
     private String added_date;
     private int modified_by;
     private String modified_date;
 
-    public Product(int product_id, String name, String description, int quantity, double price, String supplier, int added_by, String added_date, int modified_by, String modified_date){
-        this.product_id = product_id;
+    public Product(int id, String name, double price, String description, int categoryId){
+        this.id = id;
         this.name = name;
-        this.description = description;
-        this.quantity = quantity;
         this.price = price;
+        this.description = description;
+        this.categoryId = categoryId;
+    }
+
+    public Product(int id, String name, double price, String description, int categoryId, int quantity, String supplier, int added_by, String added_date, int modified_by, String modified_date){
+        this.id = id;
+        this.name = name;
+        this.price = price;
+        this.description = description;
+        this.categoryId = categoryId;
+        this.quantity = quantity;
         this.supplier = supplier;
         this.added_by = added_by;
         this.added_date = added_date;
@@ -25,16 +35,20 @@ public class Product {
         this.modified_date = modified_date;
     }
 
-    public Product(int productId, String name, int quantity, String supplier, double price) {
+    public Product(int id, String name, double price, String description, String supplier) {
+        this.id = id;
+        this.name = name;
+        this.price = price;
+        this.description = description;
+        this.supplier = supplier;
     }
 
-
-    public int getProduct_id() {
-        return product_id;
+    public int getId() {
+        return id;
     }
 
-    public void setProduct_id(int product_id) {
-        this.product_id = product_id;
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getName() {
@@ -45,6 +59,14 @@ public class Product {
         this.name = name;
     }
 
+    public double getPrice() {
+        return price;
+    }
+
+    public void setPrice(double price) {
+        this.price = price;
+    }
+
     public String getDescription() {
         return description;
     }
@@ -53,20 +75,20 @@ public class Product {
         this.description = description;
     }
 
+    public int getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(int categoryId) {
+        this.categoryId = categoryId;
+    }
+
     public int getQuantity() {
         return quantity;
     }
 
     public void setQuantity(int quantity) {
         this.quantity = quantity;
-    }
-
-    public double getPrice() {
-        return price;
-    }
-
-    public void setPrice(double price) {
-        this.price = price;
     }
 
     public String getSupplier() {
@@ -109,5 +131,3 @@ public class Product {
         this.modified_date = modified_date;
     }
 }
-
-

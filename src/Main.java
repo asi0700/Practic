@@ -15,10 +15,9 @@ public class Main {
             System.exit(1);
         }
 
-        SwingUtilities.invokeLater(() -> {
-            LoginWindow window = new LoginWindow();
-            window.setVisible(true);
-        });
+        // Изменяю запуск приложения, чтобы начинать с окна логина
+        LoginWindow loginWindow = new LoginWindow();
+        loginWindow.setVisible(true);
 
     }
 }

@@ -10,6 +10,9 @@ import java.nio.charset.StandardCharsets;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
+import adminUI.CommonMenuBar;
+import adminUI.WorkerWindow;
+import ui.ClientWindow;
 import model.User;
 
 public class registration extends JFrame {
@@ -99,9 +102,12 @@ public class registration extends JFrame {
                 dispose();
                 System.out.println("Роль зарегистрированного пользователя: " + registeredUser.getRole());
                 if ("admin".equalsIgnoreCase(registeredUser.getRole())) {
-                    openAdminWindow(registeredUser);
+                    openAdminWindow(registeredUser, null);
+                } else if ("worker".equalsIgnoreCase(registeredUser.getRole())) {
+                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), registeredUser.getUsername(), null);
+                    workerWindow.setVisible(true);
                 } else {
-                    openClientWindow(registeredUser);
+                    openClientWindow(registeredUser, null);
                 }
             }
         } catch (SQLException e) {
@@ -146,19 +152,27 @@ public class registration extends JFrame {
         addressField.setText("");
     }
 
-    private void openAdminWindow(User newUser) {
-        AdminWindow adminWindow = new AdminWindow(newUser, null); // Передаем null для MainWindow, если его нет
+    private void openAdminWindow(User newUser, MainWindow mainWindow) {
+        AdminWindow adminWindow = new AdminWindow(newUser, mainWindow); 
         adminWindow.setVisible(true);
         dispose();
     }
 
-    private void openClientWindow(User newUser) {
-        try {
-            ClientWindow clientWindow = new ClientWindow(newUser, null); // Передаем null для MainWindow, если его нет
-            clientWindow.setVisible(true);
-            dispose();
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка при открытии окна клиента: " + e.getMessage());
-        }
+    private void openClientWindow(User newUser, MainWindow mainWindow) {
+        ClientWindow clientWindow = new ClientWindow(newUser, mainWindow);
+        clientWindow.setVisible(true);
+        dispose();
+    }
+
+    private void createMenuBar() {
+        CommonMenuBar menuBar = new CommonMenuBar(
+            (e) -> dispose(),
+            (e) -> {},
+            (e) -> {},
+            (e) -> {},
+            (e) -> {},
+            ""
+        );
+        setJMenuBar(menuBar);
     }
 }

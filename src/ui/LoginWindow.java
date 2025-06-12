@@ -6,6 +6,8 @@ import java.sql.SQLException;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
+import adminUI.WorkerWindow;
+import ui.ClientWindow;
 import model.User;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +24,7 @@ public class LoginWindow extends JFrame {
         setLocationRelativeTo(null);
 
         JPanel panel = new JPanel(new GridLayout(4, 2, 10, 10));
-        panel.add(new JLabel("Имя пользователя: Глеб гей"));
+        panel.add(new JLabel("Имя пользователя: "));
         usernameField = new JTextField(15);
         panel.add(usernameField);
 
@@ -47,20 +49,20 @@ public class LoginWindow extends JFrame {
         User user = authenticateUser(username, password);
         if (user != null) {
             MainWindow mainWindow = new MainWindow(user);
-            mainWindow.setVisible(true);
             if ("admin".equalsIgnoreCase(user.getRole())) {
-                new AdminWindow(user).setVisible(true);
+                new AdminWindow(user, mainWindow).setVisible(true);
                 mainWindow.setVisible(false);
             } else if ("client".equalsIgnoreCase(user.getRole())) {
+                new ClientWindow(user, mainWindow).setVisible(true);
+                mainWindow.setVisible(false);
+            } else if ("worker".equalsIgnoreCase(user.getRole())) {
                 try {
-                    new ClientWindow(user, mainWindow).setVisible(true);
+                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), user.getUsername(), mainWindow);
+                    workerWindow.setVisible(true);
                     mainWindow.setVisible(false);
                 } catch (SQLException e) {
-                    JOptionPane.showMessageDialog(this, "Ошибка при открытии окна клиента: " + e.getMessage());
+                    JOptionPane.showMessageDialog(this, "Ошибка при открытии окна работника: " + e.getMessage());
                 }
-            } else if ("worker".equalsIgnoreCase(user.getRole())) {
-                // Здесь можно добавить окно для работника
-                JOptionPane.showMessageDialog(this, "Окно для роли работника пока не реализовано");
             }
             dispose();
         } else {

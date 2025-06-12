@@ -6,6 +6,9 @@ import Dao_db.OrderDAO;
 import Dao_db.UserDAO;
 import model.Product;
 import model.User;
+import ui.MainWindow;
+import adminUI.AdminWindow;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
@@ -26,11 +29,12 @@ public class OrdersWindow extends JFrame {
     private UserDAO userDAO;
     private String currentUserRole;
     private String currentUsername;
+    private MainWindow mainWindow;
     private JTable ordersTable;
     private DefaultTableModel tableModel;
     private JTextField searchField;
 
-    public OrdersWindow(Connection connection, String username, String role) {
+    public OrdersWindow(Connection connection, String username, String role, MainWindow mainWindow) {
         super("Управление заказами");
         this.connection = connection;
         this.orderDAO = new OrderDAO(connection);
@@ -38,6 +42,7 @@ public class OrdersWindow extends JFrame {
         this.userDAO = new UserDAO(connection);
         this.currentUsername = username;
         this.currentUserRole = role;
+        this.mainWindow = mainWindow;
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -63,7 +68,9 @@ public class OrdersWindow extends JFrame {
             (e) -> dispose(),
             (e) -> openAdminWindow(),
             (e) -> {},
-            (e) -> {}
+            (e) -> {},
+            (e) -> {},
+            currentUserRole
         );
         setJMenuBar(menuBar);
     }
@@ -401,6 +408,11 @@ public class OrdersWindow extends JFrame {
     }
 
     private void openAdminWindow() {
+        // Note: We don't have a User object here, and AdminWindow requires it.
+        // Creating a dummy User object with the current username and role.
+        User user = new User(0, currentUsername, "", currentUserRole, currentUsername, "", "", "");
+        adminUI.AdminWindow adminWindow = new adminUI.AdminWindow(user, mainWindow);
+        adminWindow.setVisible(true);
         dispose();
         logAction("Закрытие окна управления заказами");
     }
@@ -606,16 +618,20 @@ public class OrdersWindow extends JFrame {
     }
 
     private void searchOrders() {
-        String query = searchField.getText().trim();
+        String searchText = searchField.getText();
+        searchOrders(searchText);
+    }
+
+    private void searchOrders(String searchText) {
         try {
             tableModel.setRowCount(0);
             List<Object[]> orders;
-            if (query.isEmpty()) {
+            if (searchText.isEmpty()) {
                 orders = orderDAO.getAllOrders();
             } else {
                 // Assuming search by client ID or order ID
                 try {
-                    int id = Integer.parseInt(query);
+                    int id = Integer.parseInt(searchText);
                     orders = new ArrayList<>();
                     Object[] order = orderDAO.getOrderById(id);
                     if (order != null) {
@@ -625,7 +641,7 @@ public class OrdersWindow extends JFrame {
                     }
                 } catch (NumberFormatException ex) {
                     // Search by status
-                    orders = orderDAO.getOrdersByStatus(query);
+                    orders = orderDAO.getOrdersByStatus(searchText);
                 }
             }
             for (Object[] order : orders) {

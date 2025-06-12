@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
@@ -22,6 +23,7 @@ import model.Product;
 import model.User;
 import ui.LoginWindow;
 import ui.MainWindow;
+import adminUI.OrdersWindow; // Ensure OrdersWindow is correctly imported
 
 public class AdminWindow extends JFrame {
     private JPanel cards;
@@ -44,10 +46,6 @@ public class AdminWindow extends JFrame {
         this.currentUser = user;
         this.mainWindow = mainWindow;
         initializeUI();
-    }
-
-    public AdminWindow(User user) {
-        this(user, null);
     }
 
     private void initializeUI() {
@@ -80,12 +78,19 @@ public class AdminWindow extends JFrame {
     }
 
     private void createMenuBar() {
-        setJMenuBar(new CommonMenuBar(
-                e -> logout(), // Выход
-                e -> cardLayout.show(cards, "PRODUCTS"), // Товары
-                e -> cardLayout.show(cards, "ORDERS"), // Заказы как панель, а не окно
-                e -> showLogsPanel() // Новый пункт для просмотра логов
-        ));
+        CommonMenuBar menuBar = new CommonMenuBar(
+            (e) -> {
+                dispose();
+                logAction("Выход из аккаунта");
+                new ui.LoginWindow().setVisible(true);
+            },
+            (e) -> cardLayout.show(cards, "PRODUCTS"), // Товары
+            (e) -> openOrdersWindow(), // Заказы
+            (e) -> showLogsWindow(), // Логи действий
+            (e) -> {},
+            "admin" // Explicitly set the role to admin
+        );
+        setJMenuBar(menuBar);
     }
 
     private JPanel createDashboardPanel() {
@@ -644,11 +649,11 @@ public class AdminWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "OrderDAO не инициализирован. Проверьте подключение к базе данных.");
             try {
                 orderDAO = new OrderDAO(DBmanager.getConnection());
-            } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
-                System.err.println("Ошибка повторной инициализации OrderDAO: " + ex.getMessage());
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
+                System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
+                return;
             }
-            return;
         }
 
         try {
@@ -703,26 +708,22 @@ public class AdminWindow extends JFrame {
     private void logout() {
         JOptionPane.showMessageDialog(this, "Войдите в свой аккаунт");
         dispose();
-        new LoginWindow().setVisible(true);
+        new ui.LoginWindow().setVisible(true);
         logAction("Admin logged out: " + currentUser.getUsername());
     }
 
     private void logAction(String action) {
         try {
-            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
-            File logFile = new File(logFilePath);
-            if (!logFile.exists()) {
-                logFile.getParentFile().mkdirs();
-                logFile.createNewFile();
-            }
-            FileWriter fw = new FileWriter(logFile, true);
-            BufferedWriter bw = new BufferedWriter(fw);
-            bw.write(new Date().toString() + " - " + action);
-            bw.newLine();
-            bw.close();
-        } catch (IOException e) {
-            System.err.println("Ошибка при записи в лог: " + e.getMessage());
+            mainWindow.logAction(action + " (Администратор: " + currentUser.getUsername() + ")");
+        } catch (Exception e) {
+            System.err.println("Ошибка логирования: " + e.getMessage());
         }
+    }
+
+    private void showLogsWindow() {
+        LogsWindow logsWindow = new LogsWindow();
+        logsWindow.setVisible(true);
+        logAction("Открытие окна логов");
     }
 
     private void showLogsPanel() {
@@ -763,6 +764,23 @@ public class AdminWindow extends JFrame {
         } catch (IOException e) {
             logsArea.setText("Ошибка при чтении логов: " + e.getMessage());
             System.err.println("Ошибка при чтении логов: " + e.getMessage());
+        }
+    }
+
+    private void showOrdersPanel() {
+        cardLayout.show(cards, "Orders");
+        loadOrdersData();
+        logAction("Открыта вкладка заказов");
+    }
+
+    private void openOrdersWindow() {
+        try {
+            OrdersWindow ordersWindow = new OrdersWindow(DBmanager.getConnection(), currentUser.getUsername(), currentUser.getRole(), mainWindow);
+            ordersWindow.setVisible(true);
+            logAction("Открытие окна заказов");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка при открытии окна заказов: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
+            logAction("Ошибка при открытии окна заказов: " + e.getMessage());
         }
     }
 }

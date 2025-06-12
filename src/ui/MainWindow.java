@@ -4,6 +4,10 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+
+import adminUI.AdminWindow;
+import adminUI.CommonMenuBar;
+import adminUI.WorkerWindow;
 import model.User;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +21,8 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.File;
 import java.util.Date;
+import ui.ClientWindow;
+import java.text.SimpleDateFormat;
 
 public class MainWindow extends JFrame {
     private JPanel cards;
@@ -64,58 +70,14 @@ public class MainWindow extends JFrame {
     }
 
     private void createMenuBar() {
-        menuBar = new JMenuBar();
-        JMenu navMenu = new JMenu("Навигация");
-
-        JMenuItem dashboardItem = new JMenuItem("Главная");
-        dashboardItem.addActionListener(e -> cardLayout.show(cards, "DASHBOARD"));
-        navMenu.add(dashboardItem);
-
-        if (currentUser != null) {
-            String role = currentUser.getRole().toLowerCase();
-            if (role.equals("admin")) {
-                JMenuItem productsItem = new JMenuItem("Товары");
-                productsItem.addActionListener(e -> cardLayout.show(cards, "PRODUCTS"));
-                navMenu.add(productsItem);
-
-                JMenuItem inventoryItem = new JMenuItem("Инвентарь");
-                inventoryItem.addActionListener(e -> cardLayout.show(cards, "INVENTORY"));
-                navMenu.add(inventoryItem);
-
-                JMenuItem ordersItem = new JMenuItem("Заказы");
-                ordersItem.addActionListener(e -> {
-                    cardLayout.show(cards, "ORDERS");
-                    loadOrdersData((JTable) ((JScrollPane) ((JPanel) cards.getComponent(3)).getComponent(1)).getViewport().getView());
-                });
-                navMenu.add(ordersItem);
-            } else if (role.equals("client")) {
-                JMenuItem productsItem = new JMenuItem("Товары");
-                productsItem.addActionListener(e -> cardLayout.show(cards, "PRODUCTS"));
-                navMenu.add(productsItem);
-
-                JMenuItem ordersItem = new JMenuItem("Мои заказы");
-                ordersItem.addActionListener(e -> {
-                    cardLayout.show(cards, "ORDERS");
-                    loadOrdersData((JTable) ((JScrollPane) ((JPanel) cards.getComponent(3)).getComponent(1)).getViewport().getView());
-                });
-                navMenu.add(ordersItem);
-            } else if (role.equals("worker")) {
-                JMenuItem ordersItem = new JMenuItem("Заказы на обработку");
-                ordersItem.addActionListener(e -> {
-                    cardLayout.show(cards, "ORDERS");
-                    loadOrdersData((JTable) ((JScrollPane) ((JPanel) cards.getComponent(3)).getComponent(1)).getViewport().getView());
-                });
-                navMenu.add(ordersItem);
-            }
-        }
-
-        JMenu fileMenu = new JMenu("Файл");
-        JMenuItem logoutItem = new JMenuItem("Выйти из аккаунта");
-        logoutItem.addActionListener(e -> logout());
-        fileMenu.add(logoutItem);
-
-        menuBar.add(navMenu);
-        menuBar.add(fileMenu);
+        CommonMenuBar menuBar = new CommonMenuBar(
+            (e) -> dispose(),
+            (e) -> {},
+            (e) -> {},
+            (e) -> {},
+            (e) -> {},
+            ""
+        );
         setJMenuBar(menuBar);
     }
 
@@ -295,21 +257,45 @@ public class MainWindow extends JFrame {
         logAction("User logged out: " + currentUser.getUsername());
     }
 
-    private void logAction(String action) {
+    public void logAction(String action) {
         try {
-            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
-            File logFile = new File(logFilePath);
-            if (!logFile.exists()) {
-                logFile.getParentFile().mkdirs();
-                logFile.createNewFile();
-            }
-            FileWriter fw = new FileWriter(logFile, true);
-            BufferedWriter bw = new BufferedWriter(fw);
-            bw.write(new Date().toString() + " - " + action);
-            bw.newLine();
-            bw.close();
+            File logFile = new File("app_logs.txt");
+            boolean append = logFile.exists();
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String timestamp = sdf.format(new Date());
+            String logEntry = timestamp + " - " + action;
+            
+            BufferedWriter writer = new BufferedWriter(new FileWriter(logFile, append));
+            writer.write(logEntry);
+            writer.newLine();
+            writer.close();
         } catch (IOException e) {
-            System.err.println("Ошибка при записи в лог: " + e.getMessage());
+            System.err.println("Error writing to log file: " + e.getMessage());
+        }
+    }
+
+    private void handleLoginSuccess(String username, String role) {
+        System.out.println("Login successful for user: " + username + " with role: " + role);
+        logAction("Успешный вход в систему: " + username + " с ролью: " + role);
+        
+        // Создаем объект User с полученными данными
+        User user = new User(0, username, "", role, username, "", "", "");
+        
+        try {
+            if (role.equals("admin")) {
+                AdminWindow adminWindow = new AdminWindow(user, this);
+                adminWindow.setVisible(true);
+            } else if (role.equals("worker")) {
+                WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), username, this);
+                workerWindow.setVisible(true);
+            } else {
+                ClientWindow clientWindow = new ClientWindow(user, this);
+                clientWindow.setVisible(true);
+            }
+            dispose();
+        } catch (SQLException e) {
+            System.err.println("Ошибка при создании окна: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Ошибка при открытии окна: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
         }
     }
 }

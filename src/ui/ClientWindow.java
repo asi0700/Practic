@@ -18,9 +18,11 @@ import java.util.List;
 import Dao_db.OrderDAO;
 import Dao_db.ProductDAO;
 import DBobject.DBmanager;
+import adminUI.CommonMenuBar;
 import model.Order;
 import model.Product;
 import model.User;
+import ui.MainWindow; // Added missing import
 
 public class ClientWindow extends JFrame {
     private User currentUser;
@@ -32,14 +34,15 @@ public class ClientWindow extends JFrame {
     private OrderDAO orderDAO;
     private MainWindow mainWindow;
 
-    public ClientWindow(User user, MainWindow mainWindow) throws SQLException {
+    public ClientWindow(User user, MainWindow mainWindow) {
         this.currentUser = user;
         this.mainWindow = mainWindow;
-        initializeUI();
-    }
-
-    public ClientWindow(User user) throws SQLException {
-        this(user, null);
+        try {
+            initializeUI();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка инициализации: " + e.getMessage());
+            System.err.println("Ошибка инициализации: " + e.getMessage());
+        }
     }
 
     private void initializeUI() throws SQLException {
@@ -71,37 +74,20 @@ public class ClientWindow extends JFrame {
     }
 
     private void createMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-
-        JMenu navMenu = new JMenu("Навигация");
-        JMenuItem dashboardItem = new JMenuItem("Главная");
-        dashboardItem.addActionListener(e -> cardLayout.show(cards, "DASHBOARD"));
-        JMenuItem productsItem = new JMenuItem("Товары");
-        productsItem.addActionListener(e -> cardLayout.show(cards, "PRODUCTS"));
-        JMenuItem ordersItem = new JMenuItem("Мои заказы");
-        ordersItem.addActionListener(e -> {
-            cardLayout.show(cards, "ORDERS");
-            loadOrdersData();
-        });
-        JMenuItem cartItem = new JMenuItem("Корзина");
-        cartItem.addActionListener(e -> cardLayout.show(cards, "CART"));
-
-        navMenu.add(dashboardItem);
-        navMenu.add(productsItem);
-        navMenu.add(ordersItem);
-        navMenu.add(cartItem);
-
-        JMenuItem exitItem = new JMenuItem("Выйти в главное меню");
-        exitItem.addActionListener(e -> returnToMainWindow());
-
-        JMenuItem logoutItem = new JMenuItem("Выйти из аккаунта");
-        logoutItem.addActionListener(e -> logout());
-
-        menuBar.add(navMenu);
-        menuBar.add(Box.createHorizontalGlue());
-        menuBar.add(exitItem);
-        menuBar.add(logoutItem);
-
+        CommonMenuBar menuBar = new CommonMenuBar(
+            (e) -> {
+                dispose();
+                new LoginWindow().setVisible(true);
+            },
+            (e) -> cardLayout.show(cards, "PRODUCTS"),
+            (e) -> {
+                cardLayout.show(cards, "ORDERS");
+                loadOrdersData();
+            },
+            (e) -> cardLayout.show(cards, "CART"),
+            (e) -> {},
+            "client"
+        );
         setJMenuBar(menuBar);
     }
 
@@ -473,10 +459,8 @@ public class ClientWindow extends JFrame {
     }
 
     private void logout() {
-        JOptionPane.showMessageDialog(this, "Войдите в свой аккаунт");
         dispose();
         new LoginWindow().setVisible(true);
-        logAction("Client logged out: " + currentUser.getUsername());
     }
 
     private void logAction(String action) {

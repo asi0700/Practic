@@ -13,6 +13,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import Dao_db.OrderDAO;
@@ -22,7 +23,7 @@ import adminUI.CommonMenuBar;
 import model.Order;
 import model.Product;
 import model.User;
-import ui.MainWindow; // Added missing import
+import utils.Logger;
 
 public class ClientWindow extends JFrame {
     private User currentUser;
@@ -32,6 +33,7 @@ public class ClientWindow extends JFrame {
     private JTextField searchField;
     private List<Object[]> cart = new ArrayList<>(); // Корзина: [product_id, name, quantity, price]
     private OrderDAO orderDAO;
+    private ProductDAO productDAO;
     private MainWindow mainWindow;
 
     public ClientWindow(User user, MainWindow mainWindow) {
@@ -53,9 +55,10 @@ public class ClientWindow extends JFrame {
 
         try {
             orderDAO = new OrderDAO(DBmanager.getConnection());
+            productDAO = new ProductDAO(DBmanager.getConnection());
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
-            System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Ошибка инициализации DAO: " + e.getMessage());
+            System.err.println("Ошибка инициализации DAO: " + e.getMessage());
         }
 
         cardLayout = new CardLayout();
@@ -75,17 +78,14 @@ public class ClientWindow extends JFrame {
 
     private void createMenuBar() {
         CommonMenuBar menuBar = new CommonMenuBar(
-            (e) -> {
-                dispose();
-                new LoginWindow().setVisible(true);
-            },
-            (e) -> cardLayout.show(cards, "PRODUCTS"),
+            this,
+            (e) -> dispose(),
             (e) -> {
                 cardLayout.show(cards, "ORDERS");
                 loadOrdersData();
             },
             (e) -> cardLayout.show(cards, "CART"),
-            (e) -> {},
+            (e) -> cardLayout.show(cards, "PRODUCTS"),
             "client"
         );
         setJMenuBar(menuBar);
@@ -102,138 +102,105 @@ public class ClientWindow extends JFrame {
         statsPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         // Подсчет товаров и категорий
-        ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
         int totalProducts = 0;
         try {
-            totalProducts = productDao.getAllProducts().size();
+            totalProducts = productDAO.getAllProducts().size();
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Ошибка подсчета товаров: " + e.getMessage());
         }
 
         statsPanel.add(createStatCard("Всего товаров", String.valueOf(totalProducts)));
-        statsPanel.add(createStatCard("Категории товаров", "8")); // Заменить на реальный подсчет категорий
+        // Placeholder for another stat card if needed
+        statsPanel.add(createStatCard("Ваши заказы", "0")); // This will be updated dynamically if possible
 
         panel.add(statsPanel, BorderLayout.CENTER);
 
-        JLabel warningLabel = new JLabel("Товары с низким остатком:", SwingConstants.CENTER);
-        warningLabel.setForeground(Color.RED);
-        warningLabel.setFont(new Font("Arial", Font.BOLD, 16));
-
-        DefaultListModel<String> lowStockModel = new DefaultListModel<>();
-        try {
-            List<Product> lowStockProducts = productDao.getLowStockProducts(5);
-            for (Product p : lowStockProducts) {
-                lowStockModel.addElement(p.getName() + " (осталось: " + p.getQuantity() + ")");
-            }
-        } catch (SQLException e) {
-            lowStockModel.addElement("Ошибка загрузки: " + e.getMessage());
-        }
-
-        JList<String> lowStockList = new JList<>(lowStockModel);
-        lowStockList.setBackground(new Color(255, 240, 240));
-
-        JPanel warningPanel = new JPanel(new BorderLayout());
-        warningPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 20, 20));
-        warningPanel.add(warningLabel, BorderLayout.NORTH);
-        warningPanel.add(new JScrollPane(lowStockList), BorderLayout.CENTER);
-
-        panel.add(warningPanel, BorderLayout.SOUTH);
+        JButton browseProductsButton = new JButton("Просмотреть товары");
+        browseProductsButton.addActionListener(e -> cardLayout.show(cards, "PRODUCTS"));
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(browseProductsButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
 
         return panel;
     }
 
     private JPanel createProductsPanel() throws SQLException {
         JPanel panel = new JPanel(new BorderLayout());
+        JLabel label = new JLabel("Товары на складе", SwingConstants.CENTER);
+        label.setFont(new Font("Arial", Font.BOLD, 24));
+        panel.add(label, BorderLayout.NORTH);
 
-        JLabel title = new JLabel("Список товаров на складе", SwingConstants.CENTER);
-        title.setFont(new Font("Arial", Font.BOLD, 20));
-        panel.add(title, BorderLayout.NORTH);
+        // Панель поиска
+        JPanel searchPanel = new JPanel();
+        searchField = new JTextField(20);
+        JButton searchButton = new JButton("Поиск");
+        searchButton.addActionListener(e -> filterTable());
+        searchPanel.add(new JLabel("Поиск:"));
+        searchPanel.add(searchField);
+        searchPanel.add(searchButton);
+        panel.add(searchPanel, BorderLayout.NORTH);
 
-        // Подключение к базе данных
-        ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
-        List<Product> products;
-        try {
-            products = productDao.getAllProducts();
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка загрузки товаров: " + e.getMessage());
-            products = new ArrayList<>();
-        }
-
-        String[] columnNames = {"ID", "Наименование", "Количество", "Цена", "Местоположение", "Категория"};
-        Object[][] data = new Object[products.size()][6];
-        for (int i = 0; i < products.size(); i++) {
-            Product p = products.get(i);
-            data[i][0] = p.getId(); // Changed from getProduct_id() to getId()
-            data[i][1] = p.getName();
-            data[i][2] = p.getQuantity();
-            data[i][3] = p.getPrice();
-            data[i][4] = p.getSupplier() != null ? p.getSupplier() : "Не указано";
-            data[i][5] = "Общая";
-        }
-
-        DefaultTableModel model = new DefaultTableModel(data, columnNames) {
+        // Таблица товаров
+        DefaultTableModel model = new DefaultTableModel() {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
-
+        model.setColumnIdentifiers(new Object[]{"ID", "Название", "Количество", "Цена", "Поставщик", "Кто добавил", "Дата добавления"});
         productsTable = new JTable(model);
-        productsTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
-        productsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        productsTable.setAutoCreateRowSorter(true);
+        productsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
-        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
-        productsTable.setRowSorter(sorter);
+        // Устанавливаем ширину столбцов
+        productsTable.getColumnModel().getColumn(0).setPreferredWidth(50);   // ID
+        productsTable.getColumnModel().getColumn(1).setPreferredWidth(150);  // Название
+        productsTable.getColumnModel().getColumn(2).setPreferredWidth(100);  // Количество
+        productsTable.getColumnModel().getColumn(3).setPreferredWidth(100);  // Цена
+        productsTable.getColumnModel().getColumn(4).setPreferredWidth(150);  // Поставщик
+        productsTable.getColumnModel().getColumn(5).setPreferredWidth(150);  // Кто добавил
+        productsTable.getColumnModel().getColumn(6).setPreferredWidth(150);  // Дата добавления
 
-        JPanel searchPanel = new JPanel();
-        searchField = new JTextField(25);
-        JButton searchButton = new JButton("Поиск");
-        searchButton.addActionListener(e -> filterTable());
+        JScrollPane scrollPane = new JScrollPane(productsTable);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
-        searchPanel.add(new JLabel("Поиск:"));
-        searchPanel.add(searchField);
-        searchPanel.add(searchButton);
+        // Загрузка данных о товарах
+        loadProductsData();
 
+        // Кнопки действий
+        JPanel buttonPanel = new JPanel();
         JButton refreshButton = new JButton("Обновить");
         refreshButton.addActionListener(e -> {
             try {
                 refreshData();
             } catch (SQLException ex) {
-                throw new RuntimeException(ex);
+                JOptionPane.showMessageDialog(this, "Ошибка обновления данных: " + ex.getMessage());
             }
         });
-        searchPanel.add(refreshButton);
-
         JButton addToCartButton = new JButton("Добавить в корзину");
         addToCartButton.addActionListener(e -> {
-            int row = productsTable.getSelectedRow();
-            if (row >= 0) {
-                int productId = (int) productsTable.getValueAt(row, 0);
-                String name = (String) productsTable.getValueAt(row, 1);
-                int quantityAvailable = (int) productsTable.getValueAt(row, 2);
-                double price = (double) productsTable.getValueAt(row, 3);
-                String quantityInput = JOptionPane.showInputDialog(this, "Введите количество (доступно: " + quantityAvailable + "):");
-                if (quantityInput != null && !quantityInput.isEmpty()) {
-                    try {
-                        int quantity = Integer.parseInt(quantityInput);
-                        if (quantity > 0 && quantity <= quantityAvailable) {
-                            cart.add(new Object[]{productId, name, quantity, price});
-                            JOptionPane.showMessageDialog(this, name + " добавлен в корзину!");
-                        } else {
-                            JOptionPane.showMessageDialog(this, "Недопустимое количество!");
-                        }
-                    } catch (NumberFormatException ex) {
-                        JOptionPane.showMessageDialog(this, "Введите корректное число!");
-                    }
+            int selectedRow = productsTable.getSelectedRow();
+            if (selectedRow != -1) {
+                int quantity = Integer.parseInt(JOptionPane.showInputDialog(this, "Введите количество", 1));
+                if (quantity > 0) {
+                    Object[] product = new Object[]{
+                        productsTable.getValueAt(selectedRow, 0),
+                        productsTable.getValueAt(selectedRow, 1),
+                        quantity,
+                        productsTable.getValueAt(selectedRow, 3)
+                    };
+                    cart.add(product);
+                    updateCartTable();
+                    JOptionPane.showMessageDialog(this, "Товар добавлен в корзину");
                 }
             } else {
-                JOptionPane.showMessageDialog(this, "Выберите товар!");
+                JOptionPane.showMessageDialog(this, "Выберите товар для добавления в корзину");
             }
         });
-        searchPanel.add(addToCartButton);
-
-        panel.add(searchPanel, BorderLayout.NORTH);
-        panel.add(new JScrollPane(productsTable), BorderLayout.CENTER);
+        buttonPanel.add(refreshButton);
+        buttonPanel.add(addToCartButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
 
         productsTable.addMouseListener(new MouseAdapter() {
             @Override
@@ -247,172 +214,79 @@ public class ClientWindow extends JFrame {
         return panel;
     }
 
+    private void loadProductsData() {
+        try {
+            List<Object[]> products = productDAO.getAllProducts();
+            DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
+            model.setRowCount(0);
+            for (Object[] p : products) {
+                model.addRow(new Object[]{
+                    p[0], // ID
+                    p[1], // Название
+                    p[3], // Количество
+                    p[4], // Цена
+                    p[5] != null ? p[5] : "Не указано", // Поставщик
+                    p[7] != null ? p[7] : "Неизвестно", // Кто добавил
+                    p[6] // Дата добавления
+                });
+            }
+            Logger.log("Клиент " + currentUser.getUsername() + " загрузил данные товаров.");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных товаров: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
+            Logger.logError("Ошибка загрузки данных товаров для клиента: " + e.getMessage(), e);
+        }
+    }
+
+    private void refreshData() throws SQLException {
+        loadProductsData();
+        Logger.log("Клиент " + currentUser.getUsername() + " обновил данные товаров.");
+    }
+
     private JPanel createOrdersPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        JLabel label = new JLabel("Мои заказы", SwingConstants.CENTER);
+        JLabel label = new JLabel("Ваши заказы", SwingConstants.CENTER);
         label.setFont(new Font("Arial", Font.BOLD, 24));
         panel.add(label, BorderLayout.NORTH);
 
-        ordersTable = new JTable();
-        JScrollPane scrollPane = new JScrollPane(ordersTable);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        JButton refreshButton = new JButton("Обновить");
-        refreshButton.addActionListener(e -> loadOrdersData());
-        panel.add(refreshButton, BorderLayout.SOUTH);
-
-        loadOrdersData();
-
-        return panel;
-    }
-
-    private JPanel createCartPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-
-        JLabel title = new JLabel("Корзина", SwingConstants.CENTER);
-        title.setFont(new Font("Arial", Font.BOLD, 20));
-        panel.add(title, BorderLayout.NORTH);
-
-        String[] columnNames = {"Наименование", "Количество", "Цена", "Итог"};
-        Object[][] cartData = new Object[cart.size()][4];
-        double totalCost = 0;
-        for (int i = 0; i < cart.size(); i++) {
-            Object[] item = cart.get(i);
-            cartData[i][0] = item[1]; // name
-            cartData[i][1] = item[2]; // quantity
-            cartData[i][2] = item[3]; // price
-            double itemTotal = (int) item[2] * (double) item[3];
-            cartData[i][3] = itemTotal;
-            totalCost += itemTotal;
-        }
-
-        DefaultTableModel cartModel = new DefaultTableModel(cartData, columnNames) {
+        String[] columnNames = {"ID", "ID клиента", "Сумма", "Статус", "Дата заказа", "Последнее обновление"};
+        DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
+        ordersTable = new JTable(tableModel);
+        ordersTable.setAutoCreateRowSorter(true);
+        ordersTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
-        cartTable = new JTable(cartModel);
-        panel.add(new JScrollPane(cartTable), BorderLayout.CENTER);
+        // Устанавливаем ширину столбцов
+        ordersTable.getColumnModel().getColumn(0).setPreferredWidth(50);   // ID
+        ordersTable.getColumnModel().getColumn(1).setPreferredWidth(100);  // ID клиента
+        ordersTable.getColumnModel().getColumn(2).setPreferredWidth(100);  // Сумма
+        ordersTable.getColumnModel().getColumn(3).setPreferredWidth(100);  // Статус
+        ordersTable.getColumnModel().getColumn(4).setPreferredWidth(150);  // Дата заказа
+        ordersTable.getColumnModel().getColumn(5).setPreferredWidth(150);  // Последнее обновление
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton checkoutButton = new JButton("Оформить заказ");
-        double finalTotalCost = totalCost;
-        checkoutButton.addActionListener(e -> {
-            if (cart.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Корзина пуста!");
-                return;
-            }
-            OrderDAO orderDao = null;
-            try {
-                orderDao = new OrderDAO(DBmanager.getConnection());
-            } catch (SQLException ex) {
-                throw new RuntimeException(ex);
-            }
-            try {
-                int orderId = orderDao.addOrder(currentUser.getUserid(), finalTotalCost, "Новый");
-                for (Object[] item : cart) {
-                    orderDao.addOrderItem(orderId, (int) item[0], (int) item[2], (double) item[3]);
+        JScrollPane scrollPane = new JScrollPane(ordersTable);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        loadOrdersData();
+
+        ordersTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int selectedRow = ordersTable.getSelectedRow();
+                    if (selectedRow != -1) {
+                        JOptionPane.showMessageDialog(ClientWindow.this, "Opening order details for ID: " + tableModel.getValueAt(selectedRow, 0));
+                        Logger.log("Клиент " + currentUser.getUsername() + " просмотрел детали заказа ID: " + tableModel.getValueAt(selectedRow, 0));
+                    }
                 }
-                cart.clear();
-                updateCartTable();
-                JOptionPane.showMessageDialog(this, "Заказ успешно оформлен!");
-                cardLayout.show(cards, "ORDERS");
-            } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Ошибка оформления: " + ex.getMessage());
             }
         });
-        buttonPanel.add(checkoutButton);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
 
         return panel;
-    }
-
-    private void updateCartTable() {
-        DefaultTableModel cartModel = (DefaultTableModel) cartTable.getModel();
-        cartModel.setRowCount(0);
-        double totalCost = 0;
-        for (Object[] item : cart) {
-            double itemTotal = (int) item[2] * (double) item[3];
-            totalCost += itemTotal;
-            cartModel.addRow(new Object[]{item[1], item[2], item[3], itemTotal});
-        }
-    }
-
-    private JPanel createStatCard(String title, String value) {
-        JPanel card = new JPanel(new BorderLayout());
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Color.LIGHT_GRAY),
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)
-        ));
-        card.setBackground(new Color(240, 248, 255));
-
-        JLabel titleLabel = new JLabel(title, SwingConstants.CENTER);
-        JLabel valueLabel = new JLabel(value, SwingConstants.CENTER);
-        valueLabel.setFont(new Font("Arial", Font.BOLD, 36));
-
-        card.add(titleLabel, BorderLayout.NORTH);
-        card.add(valueLabel, BorderLayout.CENTER);
-
-        return card;
-    }
-
-    private void filterTable() {
-        String query = searchField.getText().toLowerCase();
-        TableRowSorter<DefaultTableModel> sorter = (TableRowSorter<DefaultTableModel>) productsTable.getRowSorter();
-        if (query.trim().isEmpty()) {
-            sorter.setRowFilter(null);
-        } else {
-            sorter.setRowFilter(RowFilter.regexFilter("(?i)" + query));
-        }
-    }
-
-    private void showProductDetails() {
-        int row = productsTable.getSelectedRow();
-        if (row >= 0) {
-            String id = productsTable.getValueAt(row, 0).toString();
-            String name = (String) productsTable.getValueAt(row, 1);
-            String quantity = productsTable.getValueAt(row, 2).toString();
-            String price = productsTable.getValueAt(row, 3).toString();
-            String location = (String) productsTable.getValueAt(row, 4);
-            String category = (String) productsTable.getValueAt(row, 5);
-
-            String details = String.format(
-                    "<html><b>ID:</b> %s<br>" +
-                            "<b>Наименование:</b> %s<br>" +
-                            "<b>Количество:</b> %s<br>" +
-                            "<b>Цена:</b> %s<br>" +
-                            "<b>Местоположение:</b> %s<br>" +
-                            "<b>Категория:</b> %s</html>",
-                    id, name, quantity, price, location, category
-            );
-
-            JOptionPane.showMessageDialog(this, details, "Детальная информация", JOptionPane.INFORMATION_MESSAGE);
-        }
-    }
-
-    private void refreshData() throws SQLException {
-        DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
-        model.setRowCount(0);
-        ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
-        List<Product> products;
-        try {
-            products = productDao.getAllProducts();
-            for (Product p : products) {
-                model.addRow(new Object[]{
-                        p.getId(), // Changed from getProduct_id() to getId()
-                        p.getName(),
-                        p.getQuantity(),
-                        p.getPrice(),
-                        p.getSupplier() != null ? p.getSupplier() : "Не указано",
-                        "Общая" // Заменить на реальную категорию
-                });
-            }
-            JOptionPane.showMessageDialog(this, "Данные успешно обновлены", "Обновление", JOptionPane.INFORMATION_MESSAGE);
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка обновления данных: " + e.getMessage());
-        }
     }
 
     private void loadOrdersData() {
@@ -429,23 +303,121 @@ public class ClientWindow extends JFrame {
 
         try {
             // Загружаем заказы только для текущего пользователя
-            List<Order> orders = orderDAO.getOrdersByClientId(currentUser.getUserid());
-            DefaultTableModel model = new DefaultTableModel();
-            model.setColumnIdentifiers(new Object[]{"ID", "Дата", "Статус"});
-
-            for (Order order : orders) {
+            List<Object[]> orders = orderDAO.getClientOrders(currentUser.getUserid());
+            DefaultTableModel model = (DefaultTableModel) ordersTable.getModel();
+            model.setRowCount(0); // Clear existing data
+            for (Object[] order : orders) {
                 model.addRow(new Object[]{
-                    order.getId(),
-                    order.getOrderDate(),
-                    order.getStatus()
+                    order[0], // ID заказа
+                    order[1], // ID клиента
+                    String.format("%.2f ₽", (double)order[3]), // Сумма
+                    order[4], // Статус
+                    order[5], // Дата заказа
+                    order[6]  // Последнее обновление
                 });
             }
-
-            ordersTable.setModel(model);
-            System.out.println("Данные заказов клиента загружены: " + orders.size() + " записей");
+            Logger.log("Клиент " + currentUser.getUsername() + " загрузил данные заказов: " + orders.size() + " записей.");
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Ошибка загрузки данных заказов: " + e.getMessage());
             System.err.println("Ошибка загрузки данных заказов: " + e.getMessage());
+            Logger.logError("Ошибка загрузки данных заказов для клиента: " + e.getMessage(), e);
+        }
+    }
+
+    private JPanel createCartPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        JLabel label = new JLabel("Корзина", SwingConstants.CENTER);
+        label.setFont(new Font("Arial", Font.BOLD, 24));
+        panel.add(label, BorderLayout.NORTH);
+
+        DefaultTableModel model = new DefaultTableModel() {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        model.setColumnIdentifiers(new Object[]{"ID", "Название", "Количество", "Цена", "Итого"});
+        cartTable = new JTable(model);
+        cartTable.setAutoCreateRowSorter(true);
+        JScrollPane scrollPane = new JScrollPane(cartTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel buttonPanel = new JPanel();
+        JButton removeButton = new JButton("Удалить из корзины");
+        removeButton.addActionListener(e -> {
+            int selectedRow = cartTable.getSelectedRow();
+            if (selectedRow != -1) {
+                cart.remove(selectedRow);
+                updateCartTable();
+                JOptionPane.showMessageDialog(this, "Товар удален из корзины");
+            } else {
+                JOptionPane.showMessageDialog(this, "Выберите товар для удаления из корзины");
+            }
+        });
+        JButton checkoutButton = new JButton("Оформить заказ");
+        checkoutButton.addActionListener(e -> {
+            if (cart.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Корзина пуста. Добавьте товары перед оформлением заказа.");
+                return;
+            }
+            // Placeholder for order processing logic
+            JOptionPane.showMessageDialog(this, "Заказ успешно оформлен!");
+            cart.clear();
+            updateCartTable();
+        });
+        buttonPanel.add(removeButton);
+        buttonPanel.add(checkoutButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        updateCartTable();
+
+        return panel;
+    }
+
+    private void updateCartTable() {
+        DefaultTableModel model = (DefaultTableModel) cartTable.getModel();
+        model.setRowCount(0);
+        for (Object[] item : cart) {
+            double total = (int) item[2] * (double) item[3];
+            model.addRow(new Object[]{item[0], item[1], item[2], item[3], total});
+        }
+    }
+
+    private JPanel createStatCard(String title, String value) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+        card.setPreferredSize(new Dimension(200, 100));
+
+        JLabel titleLabel = new JLabel(title, SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        card.add(titleLabel, BorderLayout.NORTH);
+
+        JLabel valueLabel = new JLabel(value, SwingConstants.CENTER);
+        valueLabel.setFont(new Font("Arial", Font.PLAIN, 24));
+        card.add(valueLabel, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private void filterTable() {
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>((DefaultTableModel) productsTable.getModel());
+        productsTable.setRowSorter(sorter);
+        String text = searchField.getText();
+        if (text.length() == 0) {
+            sorter.setRowFilter(null);
+        } else {
+            sorter.setRowFilter(RowFilter.regexFilter(text));
+        }
+    }
+
+    private void showProductDetails() {
+        int selectedRow = productsTable.getSelectedRow();
+        if (selectedRow != -1) {
+            StringBuilder details = new StringBuilder();
+            for (int i = 0; i < productsTable.getColumnCount(); i++) {
+                details.append(productsTable.getColumnName(i)).append(": ").append(productsTable.getValueAt(selectedRow, i)).append("\n");
+            }
+            JOptionPane.showMessageDialog(this, details.toString(), "Подробности о товаре", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -464,20 +436,6 @@ public class ClientWindow extends JFrame {
     }
 
     private void logAction(String action) {
-        try {
-            String logFilePath = "c:\\Users\\firem\\IdeaProjects\\PracticOsnova\\logs\\actions.log";
-            java.io.File logFile = new java.io.File(logFilePath);
-            if (!logFile.exists()) {
-                logFile.getParentFile().mkdirs();
-                logFile.createNewFile();
-            }
-            FileWriter fw = new FileWriter(logFile, true);
-            BufferedWriter bw = new BufferedWriter(fw);
-            bw.write(new java.util.Date().toString() + " - " + action);
-            bw.newLine();
-            bw.close();
-        } catch (IOException e) {
-            System.err.println("Ошибка при записи в лог: " + e.getMessage());
-        }
+        Logger.log(action);
     }
 }

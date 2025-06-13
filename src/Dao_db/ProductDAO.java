@@ -5,7 +5,7 @@ import model.Product;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.sql.Connection;
+import java.util.Date;
 
 public class ProductDAO implements AutoCloseable {
     private final Connection connection;
@@ -15,82 +15,101 @@ public class ProductDAO implements AutoCloseable {
     }
 
     public void addProduct(Product product) throws SQLException {
-        String sql = "INSERT INTO Products (name, description, quantity, price, added_by, added_date, modified_by, modified_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setString(1, product.getName());
-            stmt.setString(2, product.getDescription());
-            stmt.setInt(3, product.getQuantity());
-            stmt.setDouble(4, product.getPrice());
-            stmt.setInt(5, product.getAdded_by());
-            stmt.setString(6, product.getAdded_date());
-            stmt.setInt(7, product.getModified_by());
-            stmt.setString(8, product.getModified_date());
-            stmt.executeUpdate();
+        String sql = "INSERT INTO Products (name, description, price, quantity, supplier, added_by, added_date, modified_by, modified_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            pstmt.setString(1, product.getName());
+            pstmt.setString(2, product.getDescription());
+            pstmt.setDouble(3, product.getPrice());
+            pstmt.setInt(4, product.getQuantity());
+            pstmt.setString(5, product.getSupplier());
+            pstmt.setInt(6, product.getAdded_by());
+            pstmt.setTimestamp(7, new Timestamp(product.getAdded_date().getTime()));
+            pstmt.setInt(8, product.getModified_by());
+            pstmt.setTimestamp(9, new Timestamp(product.getModified_date().getTime()));
+            pstmt.executeUpdate();
 
-            ResultSet rs = stmt.getGeneratedKeys();
-            if (rs.next()) {
-                product.setId(rs.getInt(1));
+            try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    product.setId(generatedKeys.getInt(1));
+                }
             }
-        } catch (SQLException e) {
-            System.out.println("Ошибка при добавлении товара: " + e.getMessage());
-            throw e;
         }
     }
 
     public void updateProduct(Product product) throws SQLException {
-        String sql = "UPDATE Products SET name = ?, description = ?, quantity = ?, price = ?, supplier = ?, added_by = ?, added_date = ?, modified_by = ?, modified_date = ? WHERE product_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setString(1, product.getName());
-            stmt.setString(2, product.getDescription());
-            stmt.setInt(3, product.getQuantity());
-            stmt.setDouble(4, product.getPrice());
-            stmt.setString(5, product.getSupplier());
-            stmt.setInt(6, product.getAdded_by());
-            stmt.setString(7, product.getAdded_date());
-            stmt.setInt(8, product.getModified_by());
-            stmt.setString(9, product.getModified_date());
-            stmt.setInt(10, product.getId());
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Ошибка при обновлении товара: " + e.getMessage());
-            throw e;
+        String sql = "UPDATE Products SET name = ?, description = ?, price = ?, quantity = ?, supplier = ?, modified_by = ?, modified_date = ? WHERE product_id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, product.getName());
+            pstmt.setString(2, product.getDescription());
+            pstmt.setDouble(3, product.getPrice());
+            pstmt.setInt(4, product.getQuantity());
+            pstmt.setString(5, product.getSupplier());
+            pstmt.setInt(6, product.getModified_by());
+            pstmt.setTimestamp(7, new Timestamp(product.getModified_date().getTime()));
+            pstmt.setInt(8, product.getId());
+            pstmt.executeUpdate();
         }
     }
 
     public void deleteProduct(int productId) throws SQLException {
         String sql = "DELETE FROM Products WHERE product_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, productId);
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Ошибка при удалении товара: " + e.getMessage());
-            throw e;
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, productId);
+            pstmt.executeUpdate();
         }
     }
 
-    public List<Product> getAllProducts() throws SQLException {
-        List<Product> products = new ArrayList<>();
-        String sql = "SELECT * FROM Products";
+    public Product getProductById(int productId) throws SQLException {
+        String sql = "SELECT * FROM Products WHERE product_id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, productId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    Product product = new Product();
+                    product.setId(rs.getInt("product_id"));
+                    product.setName(rs.getString("name"));
+                    product.setDescription(rs.getString("description"));
+                    product.setPrice(rs.getDouble("price"));
+                    product.setQuantity(rs.getInt("quantity"));
+                    product.setSupplier(rs.getString("supplier"));
+                    product.setAdded_by(rs.getInt("added_by"));
+                    product.setModified_by(rs.getInt("modified_by"));
+                    
+                    Timestamp addedDate = rs.getTimestamp("added_date");
+                    Timestamp modifiedDate = rs.getTimestamp("modified_date");
+                    product.setAdded_date(addedDate != null ? new Date(addedDate.getTime()) : new Date());
+                    product.setModified_date(modifiedDate != null ? new Date(modifiedDate.getTime()) : new Date());
+                    
+                    return product;
+                }
+            }
+        }
+        return null;
+    }
+
+    public List<Object[]> getAllProducts() throws SQLException {
+        List<Object[]> products = new ArrayList<>();
+        String sql = """
+            SELECT p.product_id, p.name, p.description, p.quantity, p.price, 
+                   p.supplier, p.added_date, u.name as added_by_name
+            FROM Products p
+            LEFT JOIN Users u ON p.added_by = u.user_id
+            ORDER BY p.name ASC
+            """;
         try (PreparedStatement stmt = connection.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
-                products.add(new Product(
-                        rs.getInt("product_id"),
-                        rs.getString("name"),
-                        rs.getDouble("price"),
-                        rs.getString("description"),
-                        0, // Placeholder for categoryId as it might not be in the result set or schema
-                        rs.getInt("quantity"),
-                        rs.getString("supplier"),
-                        rs.getInt("added_by"),
-                        rs.getString("added_date"),
-                        rs.getInt("modified_by"),
-                        rs.getString("modified_date")
-                ));
+                products.add(new Object[]{
+                    rs.getInt("product_id"),
+                    rs.getString("name"),
+                    rs.getString("description"),
+                    rs.getInt("quantity"),
+                    rs.getDouble("price"),
+                    rs.getString("supplier"),
+                    rs.getString("added_date"),
+                    rs.getString("added_by_name")
+                });
             }
-        } catch (SQLException e) {
-            System.err.println("Ошибка при получении товаров: " + e.getMessage());
-            throw e;
         }
         return products;
     }
@@ -167,30 +186,10 @@ public class ProductDAO implements AutoCloseable {
         }
     }
 
-    public Product getProductById(int id) throws SQLException {
-        String sql = "SELECT product_id, name, price, description, supplier FROM products WHERE product_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, id);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return new Product(
-                        rs.getInt("product_id"),
-                        rs.getString("name"),
-                        rs.getDouble("price"),
-                        rs.getString("description"),
-                        rs.getString("supplier")
-                    );
-                }
-            }
-        }
-        return null;
-    }
-
     @Override
     public void close() throws SQLException {
         if (connection != null && !connection.isClosed()) {
             connection.close();
-            System.out.println("Соединение закрыто в ProductDAO");
         }
     }
 }

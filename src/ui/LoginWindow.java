@@ -6,11 +6,12 @@ import java.sql.SQLException;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
-import adminUI.WorkerWindow;
+import workerUI.WorkerWindow;
 import ui.ClientWindow;
 import model.User;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
+import utils.Logger;
 
 public class LoginWindow extends JFrame {
     private JTextField usernameField;
@@ -46,26 +47,33 @@ public class LoginWindow extends JFrame {
     private void login() {
         String username = usernameField.getText();
         String password = new String(passwordField.getPassword());
+
         User user = authenticateUser(username, password);
         if (user != null) {
+            Logger.log("Успешный вход пользователя: " + username);
+            Logger.log("Роль пользователя: " + user.getRole());
+            
             MainWindow mainWindow = new MainWindow(user);
             if ("admin".equalsIgnoreCase(user.getRole())) {
                 new AdminWindow(user, mainWindow).setVisible(true);
-                mainWindow.setVisible(false);
+                Logger.log("Открыто окно администратора для пользователя: " + username);
             } else if ("client".equalsIgnoreCase(user.getRole())) {
                 new ClientWindow(user, mainWindow).setVisible(true);
-                mainWindow.setVisible(false);
+                Logger.log("Открыто окно клиента для пользователя: " + username);
             } else if ("worker".equalsIgnoreCase(user.getRole())) {
                 try {
-                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), user.getUsername(), mainWindow);
+                    MainWindow workerMainWindow = new MainWindow(user);
+                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), user.getUsername(), workerMainWindow);
                     workerWindow.setVisible(true);
-                    mainWindow.setVisible(false);
+                    Logger.log("Открыто окно работника для пользователя: " + username);
                 } catch (SQLException e) {
+                    Logger.logError("Ошибка при открытии окна работника", e);
                     JOptionPane.showMessageDialog(this, "Ошибка при открытии окна работника: " + e.getMessage());
                 }
             }
             dispose();
         } else {
+            Logger.log("Неудачная попытка входа пользователя: " + username);
             JOptionPane.showMessageDialog(this, "Неверное имя пользователя или пароль");
         }
     }

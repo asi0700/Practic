@@ -11,7 +11,7 @@ import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
 import adminUI.CommonMenuBar;
-import adminUI.WorkerWindow;
+import workerUI.WorkerWindow;
 import ui.ClientWindow;
 import model.User;
 
@@ -90,10 +90,18 @@ public class registration extends JFrame {
             return;
         }
 
-        String hashedPassword = hashPassword(password);
-        User user = new User(0, username, hashedPassword, role, name, phone, address, registrationDate);
-
+        // Проверка на количество админов
         try (AddUser userDao = new AddUser(DBmanager.getConnection())) {
+            if ("admin".equalsIgnoreCase(role)) {
+                if (userDao.countAdmins() > 0) {
+                    JOptionPane.showMessageDialog(this, "Администратор уже существует. Нельзя зарегистрировать более одного администратора.", "Ошибка регистрации", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            }
+
+            String hashedPassword = hashPassword(password);
+            User user = new User(0, username, hashedPassword, role, name, phone, address, registrationDate);
+
             userDao.addUser(user);
             JOptionPane.showMessageDialog(this, "Регистрация успешна!");
             clearFields();
@@ -104,8 +112,10 @@ public class registration extends JFrame {
                 if ("admin".equalsIgnoreCase(registeredUser.getRole())) {
                     openAdminWindow(registeredUser, null);
                 } else if ("worker".equalsIgnoreCase(registeredUser.getRole())) {
-                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), registeredUser.getUsername(), null);
+                    MainWindow mainWindow = new MainWindow(registeredUser);
+                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), registeredUser.getUsername(), mainWindow);
                     workerWindow.setVisible(true);
+                    mainWindow.setVisible(true);
                 } else {
                     openClientWindow(registeredUser, null);
                 }
@@ -166,8 +176,8 @@ public class registration extends JFrame {
 
     private void createMenuBar() {
         CommonMenuBar menuBar = new CommonMenuBar(
+            this,
             (e) -> dispose(),
-            (e) -> {},
             (e) -> {},
             (e) -> {},
             (e) -> {},

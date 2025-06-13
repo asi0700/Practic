@@ -3,7 +3,7 @@ package adminUI;
 import DBobject.DBmanager;
 import Dao_db.ProductDAO;
 import Dao_db.OrderDAO;
-import Dao_db.UserDAO;
+import Dao_db.AddUser;
 import model.Product;
 import model.User;
 import ui.MainWindow;
@@ -26,7 +26,7 @@ public class OrdersWindow extends JFrame {
     private Connection connection;
     private OrderDAO orderDAO;
     private ProductDAO productDAO;
-    private UserDAO userDAO;
+    private AddUser userDAO;
     private String currentUserRole;
     private String currentUsername;
     private MainWindow mainWindow;
@@ -39,7 +39,7 @@ public class OrdersWindow extends JFrame {
         this.connection = connection;
         this.orderDAO = new OrderDAO(connection);
         this.productDAO = new ProductDAO(connection);
-        this.userDAO = new UserDAO(connection);
+        this.userDAO = new AddUser(connection);
         this.currentUsername = username;
         this.currentUserRole = role;
         this.mainWindow = mainWindow;
@@ -65,8 +65,8 @@ public class OrdersWindow extends JFrame {
 
     private void createMenuBar() {
         CommonMenuBar menuBar = new CommonMenuBar(
+            this,
             (e) -> dispose(),
-            (e) -> openAdminWindow(),
             (e) -> {},
             (e) -> {},
             (e) -> {},

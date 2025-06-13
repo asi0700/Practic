@@ -1,46 +1,51 @@
 package model;
 
+import java.util.Date;
+
 public class Product {
     private int id;
     private String name;
-    private double price;
     private String description;
-    private int categoryId;
+    private double price;
     private int quantity;
+    private String category;
     private String supplier;
+    private Date added_date;
     private int added_by;
-    private String added_date;
+    private Date modified_date;
     private int modified_by;
-    private String modified_date;
 
-    public Product(int id, String name, double price, String description, int categoryId){
-        this.id = id;
-        this.name = name;
-        this.price = price;
-        this.description = description;
-        this.categoryId = categoryId;
+    public Product() {
+        this.id = 0;
+        this.name = "";
+        this.description = "";
+        this.price = 0.0;
+        this.quantity = 0;
+        this.category = "";
+        this.supplier = "";
+        this.added_date = new Date();
+        this.added_by = 0;
+        this.modified_date = new Date();
+        this.modified_by = 0;
     }
 
-    public Product(int id, String name, double price, String description, int categoryId, int quantity, String supplier, int added_by, String added_date, int modified_by, String modified_date){
+    public Product(int id, String name, double price, String description, int quantity, String supplier, int added_by, String added_date, int modified_by, String modified_date) {
         this.id = id;
         this.name = name;
         this.price = price;
         this.description = description;
-        this.categoryId = categoryId;
         this.quantity = quantity;
         this.supplier = supplier;
         this.added_by = added_by;
-        this.added_date = added_date;
         this.modified_by = modified_by;
-        this.modified_date = modified_date;
+        this.added_date = new Date();
+        this.modified_date = new Date();
     }
 
-    public Product(int id, String name, double price, String description, String supplier) {
-        this.id = id;
-        this.name = name;
-        this.price = price;
-        this.description = description;
-        this.supplier = supplier;
+    public Product(int productId, String name, double price, String description, int i, int quantity, String supplier, int addedBy, String addedDate, int modifiedBy, String modifiedDate) {
+    }
+
+    public Product(int productId, String name, double price, String s, String supplier) {
     }
 
     public int getId() {
@@ -59,14 +64,6 @@ public class Product {
         this.name = name;
     }
 
-    public double getPrice() {
-        return price;
-    }
-
-    public void setPrice(double price) {
-        this.price = price;
-    }
-
     public String getDescription() {
         return description;
     }
@@ -75,12 +72,12 @@ public class Product {
         this.description = description;
     }
 
-    public int getCategoryId() {
-        return categoryId;
+    public double getPrice() {
+        return price;
     }
 
-    public void setCategoryId(int categoryId) {
-        this.categoryId = categoryId;
+    public void setPrice(double price) {
+        this.price = price;
     }
 
     public int getQuantity() {
@@ -91,12 +88,28 @@ public class Product {
         this.quantity = quantity;
     }
 
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
     public String getSupplier() {
         return supplier;
     }
 
     public void setSupplier(String supplier) {
         this.supplier = supplier;
+    }
+
+    public Date getAdded_date() {
+        return added_date;
+    }
+
+    public void setAdded_date(Date added_date) {
+        this.added_date = added_date;
     }
 
     public int getAdded_by() {
@@ -107,12 +120,12 @@ public class Product {
         this.added_by = added_by;
     }
 
-    public String getAdded_date() {
-        return added_date;
+    public Date getModified_date() {
+        return modified_date;
     }
 
-    public void setAdded_date(String added_date) {
-        this.added_date = added_date;
+    public void setModified_date(Date modified_date) {
+        this.modified_date = modified_date;
     }
 
     public int getModified_by() {
@@ -121,13 +134,5 @@ public class Product {
 
     public void setModified_by(int modified_by) {
         this.modified_by = modified_by;
-    }
-
-    public String getModified_date() {
-        return modified_date;
-    }
-
-    public void setModified_date(String modified_date) {
-        this.modified_date = modified_date;
     }
 }

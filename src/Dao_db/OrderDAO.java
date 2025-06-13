@@ -2,6 +2,7 @@ package Dao_db;
 
 import DBobject.DBmanager;
 import model.Order;
+import model.OrderItem;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -28,16 +29,20 @@ public class OrderDAO {
 
     public List<Object[]> getClientOrders(int clientId) throws SQLException {
         List<Object[]> orders = new ArrayList<>();
-        String sql = "SELECT order_id, order_date, status FROM Orders WHERE client_id = ?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        String query = "SELECT order_id, client_id, total_cost, status, order_date, last_updated FROM orders WHERE client_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setInt(1, clientId);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                Object[] order = new Object[3];
-                order[0] = rs.getInt("order_id");
-                order[1] = rs.getString("order_date");
-                order[2] = rs.getString("status");
-                orders.add(order);
+                orders.add(new Object[]{
+                    rs.getInt("order_id"),
+                    rs.getInt("client_id"),
+                    "Items not available",
+                    rs.getDouble("total_cost"),
+                    rs.getString("status"),
+                    rs.getString("order_date"),
+                    rs.getString("last_updated")
+                });
             }
         }
         return orders;
@@ -74,6 +79,35 @@ public class OrderDAO {
         }
     }
 
+    public void addOrder(Order order) throws SQLException {
+        String sql = "INSERT INTO Orders (client_id, order_date, total_cost, status, last_updated) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, order.getClientId());
+            String now = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+            pstmt.setString(2, now);
+            pstmt.setDouble(3, order.getTotalCost());
+            pstmt.setString(4, order.getStatus());
+            pstmt.setString(5, order.getLastUpdated());
+            pstmt.executeUpdate();
+        }
+    }
+
+    private String orderItemsToString(List<OrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (OrderItem item : items) {
+            sb.append(item.getProductId()).append(":").append(item.getQuantity());
+            sb.append(",");
+        }
+        // Remove the last comma
+        if (sb.length() > 0) {
+            sb.setLength(sb.length() - 1);
+        }
+        return sb.toString();
+    }
+
     public void addOrderItem(int orderId, int productId, int quantity, double pricePerUnit) throws SQLException {
         String sql = "INSERT INTO order_items (order_id, product_id, quantity, price_per_unit) VALUES (?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -87,20 +121,20 @@ public class OrderDAO {
 
     public List<Object[]> getOrdersByStatus(String status) throws SQLException {
         List<Object[]> orders = new ArrayList<>();
-        String sql = "SELECT o.order_id, u.name, o.order_date, o.status " +
-                "FROM Orders o " +
-                "JOIN Users u ON o.client_id = u.user_id " +
-                "WHERE o.status = ?";
+        String sql = "SELECT order_id, client_id, total_cost, status, order_date FROM orders WHERE status = ?";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, status);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                Object[] order = new Object[4];
-                order[0] = rs.getInt("order_id");
-                order[1] = rs.getString("name");
-                order[2] = rs.getString("order_date");
-                order[3] = rs.getString("status");
-                orders.add(order);
+                orders.add(new Object[]{
+                    rs.getInt("order_id"),
+                    rs.getInt("client_id"),
+                    "Items not available",
+                    rs.getDouble("total_cost"),
+                    rs.getString("status"),
+                    rs.getString("order_date"),
+                    "N/A"
+                });
             }
         }
         return orders;
@@ -120,7 +154,7 @@ public class OrderDAO {
 
     public List<Object[]> getAllOrders() throws SQLException {
         List<Object[]> orders = new ArrayList<>();
-        String sql = "SELECT order_id, client_id, order_date, status FROM orders";
+        String sql = "SELECT * FROM Orders";
         try (PreparedStatement stmt = connection.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
@@ -128,7 +162,9 @@ public class OrderDAO {
                     rs.getInt("order_id"),
                     rs.getInt("client_id"),
                     rs.getString("order_date"),
-                    rs.getString("status")
+                    rs.getDouble("total_cost"),
+                    rs.getString("status"),
+                    rs.getString("last_updated")
                 });
             }
         }
@@ -238,6 +274,27 @@ public class OrderDAO {
             if (rowsAffected == 0) {
                 throw new SQLException("Заказ с ID " + orderId + " не найден.");
             }
+        }
+    }
+
+    public void updateOrder(Order order, int modifiedByUserId) throws SQLException {
+        String sql = "UPDATE Orders SET client_id = ?, total_cost = ?, status = ?, last_updated = datetime('now'), modified_by = ? WHERE order_id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, order.getClientId());
+            pstmt.setDouble(2, order.getTotalCost());
+            pstmt.setString(3, order.getStatus());
+            pstmt.setInt(4, modifiedByUserId);
+            pstmt.setInt(5, order.getId());
+            pstmt.executeUpdate();
+        }
+    }
+
+    public void deleteOrderItem(int orderId, int productId) throws SQLException {
+        String sql = "DELETE FROM order_items WHERE order_id = ? AND product_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, orderId);
+            stmt.setInt(2, productId);
+            stmt.executeUpdate();
         }
     }
 }

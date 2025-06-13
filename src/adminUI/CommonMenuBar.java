@@ -3,66 +3,72 @@ package adminUI;
 import javax.swing.*;
 import java.awt.event.ActionListener;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 
 public class CommonMenuBar extends JMenuBar {
-    private ActionListener exitListener;
-    private ActionListener productsListener;
+    private ActionListener logoutListener;
     private ActionListener ordersListener;
     private ActionListener logsListener;
-    private ActionListener workerTasksListener;
-    private String userRole;
+    private ActionListener productsListener;
+    private String role;
 
-    public CommonMenuBar(ActionListener exitListener, ActionListener productsListener, ActionListener ordersListener, ActionListener logsListener, ActionListener workerTasksListener, String userRole) {
-        this.exitListener = exitListener;
-        this.productsListener = productsListener;
+    public CommonMenuBar(JFrame parent, ActionListener logoutListener, ActionListener ordersListener, ActionListener logsListener, ActionListener productsListener, String role) {
+        this.logoutListener = logoutListener;
         this.ordersListener = ordersListener;
         this.logsListener = logsListener;
-        this.workerTasksListener = workerTasksListener;
-        this.userRole = userRole;
-        initializeMenu();
-    }
-
-    private void initializeMenu() {
-
-        JMenu navMenu = new JMenu("Навигация");
-        JMenuItem productsItem = new JMenuItem("Товары");
-        productsItem.addActionListener(productsListener);
-        navMenu.add(productsItem);
+        this.productsListener = productsListener;
+        this.role = role;
+        setBackground(new Color(240, 240, 240));
         
-        if (userRole.equals("admin")) {
-            JMenuItem ordersItem = new JMenuItem("Заказы");
-            ordersItem.addActionListener(ordersListener);
-            navMenu.add(ordersItem);
-            JMenuItem logsItem = new JMenuItem("Логи действий");
-            logsItem.addActionListener(logsListener);
-            navMenu.add(logsItem);
-        } else if (userRole.equals("worker")) {
-            JMenuItem tasksItem = new JMenuItem("Задачи работника");
-            tasksItem.addActionListener(workerTasksListener);
-            navMenu.add(tasksItem);
-        }
-
-        JMenu fileMenu = new JMenu("Аккаунт");
-        JMenuItem logoutItem = new JMenuItem("Выйти из аккаунта");
-        logoutItem.addActionListener(exitListener);
-        fileMenu.add(logoutItem);
-
-        add(navMenu);
-        add(fileMenu);
-
-        JPanel searchPanel = new JPanel();
-        JTextField searchField = new JTextField(20);
-        JButton searchButton = new JButton("Поиск");
-        searchButton.addActionListener(e -> {
-            if (productsListener != null) {
-                productsListener.actionPerformed(null);
+        JMenu accountMenu = new JMenu("Аккаунт");
+        accountMenu.setMnemonic(KeyEvent.VK_A);
+        
+        JMenuItem logoutItem = new JMenuItem("Выйти", KeyEvent.VK_L);
+        logoutItem.addActionListener(logoutListener);
+        accountMenu.add(logoutItem);
+        
+        add(accountMenu);
+        
+        if (role.equals("admin") || role.equals("worker")) {
+            JMenu navigationMenu = new JMenu("Навигация");
+            navigationMenu.setMnemonic(KeyEvent.VK_N);
+            
+            if (role.equals("admin")) {
+                JMenuItem ordersItem = new JMenuItem("Заказы", KeyEvent.VK_O);
+                ordersItem.addActionListener(ordersListener);
+                navigationMenu.add(ordersItem);
+                
+                JMenuItem logsItem = new JMenuItem("Логи действий", KeyEvent.VK_G);
+                logsItem.addActionListener(logsListener);
+                navigationMenu.add(logsItem);
+                
+                JMenuItem productsItem = new JMenuItem("Товары", KeyEvent.VK_P);
+                productsItem.addActionListener(productsListener);
+                navigationMenu.add(productsItem);
+            } else if (role.equals("worker")) {
+                JMenuItem tasksItem = new JMenuItem("Задачи", KeyEvent.VK_T);
+                tasksItem.addActionListener(ordersListener);
+                navigationMenu.add(tasksItem);
             }
-        });
-        searchPanel.add(new JLabel("Поиск товара:"));
-        searchPanel.add(searchField);
-        searchPanel.add(searchButton);
-
-        add(Box.createHorizontalGlue());
-        add(searchPanel);
+            
+            add(navigationMenu);
+        } else if (role.equals("client")) {
+            JMenu navigationMenu = new JMenu("Навигация");
+            navigationMenu.setMnemonic(KeyEvent.VK_N);
+            
+            JMenuItem productsItem = new JMenuItem("Товары", KeyEvent.VK_P);
+            productsItem.addActionListener(productsListener);
+            navigationMenu.add(productsItem);
+            
+            JMenuItem ordersItem = new JMenuItem("Заказы", KeyEvent.VK_O);
+            ordersItem.addActionListener(ordersListener);
+            navigationMenu.add(ordersItem);
+            
+            JMenuItem cartItem = new JMenuItem("Корзина", KeyEvent.VK_C);
+            cartItem.addActionListener(logsListener);
+            navigationMenu.add(cartItem);
+            
+            add(navigationMenu);
+        }
     }
 }

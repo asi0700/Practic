@@ -7,12 +7,12 @@ import java.awt.event.ActionEvent;
 
 import adminUI.AdminWindow;
 import adminUI.CommonMenuBar;
-import adminUI.WorkerWindow;
+import workerUI.WorkerWindow;
 import model.User;
 import java.util.ArrayList;
 import java.util.List;
 import Dao_db.OrderDAO;
-import model.Order;
+//import model.Order;
 import java.sql.SQLException;
 import java.sql.Connection;
 import DBobject.DBmanager;
@@ -34,11 +34,13 @@ public class MainWindow extends JFrame {
     private User currentUser;
     private JMenuBar menuBar;
     private OrderDAO orderDAO;
+    private Connection conn;
 
     public MainWindow(User currentUser) {
         this.currentUser = currentUser;
         try {
-            this.orderDAO = new OrderDAO(DBmanager.getConnection());
+            this.conn = DBmanager.getConnection();
+            this.orderDAO = new OrderDAO(conn);
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
             System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
@@ -71,12 +73,12 @@ public class MainWindow extends JFrame {
 
     private void createMenuBar() {
         CommonMenuBar menuBar = new CommonMenuBar(
+            this,
             (e) -> dispose(),
+            (e) -> cardLayout.show(cards, "ORDERS"),
             (e) -> {},
-            (e) -> {},
-            (e) -> {},
-            (e) -> {},
-            ""
+            (e) -> cardLayout.show(cards, "PRODUCTS"),
+            currentUser != null ? currentUser.getRole() : ""
         );
         setJMenuBar(menuBar);
     }
@@ -280,22 +282,17 @@ public class MainWindow extends JFrame {
         
         // Создаем объект User с полученными данными
         User user = new User(0, username, "", role, username, "", "", "");
-        
-        try {
-            if (role.equals("admin")) {
-                AdminWindow adminWindow = new AdminWindow(user, this);
-                adminWindow.setVisible(true);
-            } else if (role.equals("worker")) {
-                WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), username, this);
-                workerWindow.setVisible(true);
-            } else {
-                ClientWindow clientWindow = new ClientWindow(user, this);
-                clientWindow.setVisible(true);
-            }
-            dispose();
-        } catch (SQLException e) {
-            System.err.println("Ошибка при создании окна: " + e.getMessage());
-            JOptionPane.showMessageDialog(this, "Ошибка при открытии окна: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
+
+        if (role.equals("admin")) {
+            AdminWindow adminWindow = new AdminWindow(user, this);
+            adminWindow.setVisible(true);
+        } else if (role.equals("worker")) {
+            WorkerWindow workerWindow = new WorkerWindow(conn, username, this);
+            workerWindow.setVisible(true);
+        } else {
+            ClientWindow clientWindow = new ClientWindow(user, this);
+            clientWindow.setVisible(true);
         }
+        dispose();
     }
 }

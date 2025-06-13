@@ -1,29 +1,30 @@
 package adminUI;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.io.BufferedWriter;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.awt.event.ActionListener;
+import java.io.*;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
+import java.text.SimpleDateFormat;
 
 import Dao_db.ProductDAO;
 import Dao_db.AddUser;
 import Dao_db.OrderDAO;
 import DBobject.DBmanager;
+import model.Order;
 import model.Product;
 import model.User;
 import ui.LoginWindow;
 import ui.MainWindow;
 import adminUI.OrdersWindow; // Ensure OrdersWindow is correctly imported
+import adminUI.LogsWindow; // Added import statement for LogsWindow
+import utils.Logger;
 
 public class AdminWindow extends JFrame {
     private JPanel cards;
@@ -38,6 +39,9 @@ public class AdminWindow extends JFrame {
     private OrderDAO orderDAO;
     private MainWindow mainWindow;
     private ProductDAO productDAO; // Добавляем объявление переменной
+    private int currentUserId;
+    private String currentUsername;
+    private AddUser userDAO;
 
     public AdminWindow(User user, MainWindow mainWindow) {
         if (user == null) {
@@ -45,52 +49,59 @@ public class AdminWindow extends JFrame {
         }
         this.currentUser = user;
         this.mainWindow = mainWindow;
+        this.currentUserId = user.getUserid();
+        this.currentUsername = user.getUsername();
+        
+        try {
+            System.out.println("Проверка таблицы Orders...");
+            DBmanager.checkOrdersTable();
+            productDAO = new ProductDAO(DBmanager.getConnection());
+            orderDAO = new OrderDAO(DBmanager.getConnection());
+            userDAO = new AddUser(DBmanager.getConnection());
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                "Ошибка подключения к базе данных: " + e.getMessage(),
+                "Ошибка",
+                JOptionPane.ERROR_MESSAGE);
+            Logger.log("Ошибка подключения к базе данных: " + e.getMessage());
+        }
+        
         initializeUI();
+        Logger.log("Открыто окно администратора для пользователя " + currentUsername);
     }
 
     private void initializeUI() {
-        setTitle("Администратор - Склад-Мастер");
-        setSize(800, 600);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setTitle("Панель администратора");
+        setSize(1200, 800);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // Инициализация DAO для работы с заказами
-        try {
-            orderDAO = new OrderDAO(DBmanager.getConnection());
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
-            System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
-        }
-
-        cardLayout = new CardLayout();
-        cards = new JPanel(cardLayout);
-
-        // Добавляем панели для различных вкладок
-        cards.add(createDashboardPanel(), "DASHBOARD");
-        cards.add(createProductsPanel(), "PRODUCTS");
-        cards.add(createOrdersPanel(), "ORDERS"); // Добавляем панель заказов
-
-        add(cards);
-
-        createMenuBar();
-
-        cardLayout.show(cards, "DASHBOARD");
-    }
-
-    private void createMenuBar() {
+        // Создаем меню
         CommonMenuBar menuBar = new CommonMenuBar(
-            (e) -> {
-                dispose();
-                logAction("Выход из аккаунта");
-                new ui.LoginWindow().setVisible(true);
-            },
-            (e) -> cardLayout.show(cards, "PRODUCTS"), // Товары
-            (e) -> openOrdersWindow(), // Заказы
-            (e) -> showLogsWindow(), // Логи действий
-            (e) -> {},
-            "admin" // Explicitly set the role to admin
+            this,
+            e -> dispose(),
+            e -> cardLayout.show(cards, "ORDERS"),
+            e -> cardLayout.show(cards, "LOGS"),
+            e -> cardLayout.show(cards, "PRODUCTS"),
+            "admin"
         );
         setJMenuBar(menuBar);
+
+        // Создаем панель с картами
+        cards = new JPanel(new CardLayout());
+        cardLayout = (CardLayout) cards.getLayout();
+
+        // Добавляем панели
+        cards.add(createDashboardPanel(), "DASHBOARD");
+        cards.add(createProductsPanel(), "PRODUCTS");
+        cards.add(createOrdersPanel(), "ORDERS");
+        cards.add(createLogsPanel(), "LOGS");
+
+        // Добавляем панель с картами в окно
+        add(cards);
+
+        // Показываем панель товаров по умолчанию
+        cardLayout.show(cards, "PRODUCTS");
     }
 
     private JPanel createDashboardPanel() {
@@ -113,13 +124,15 @@ public class AdminWindow extends JFrame {
 
     private JPanel createProductsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-
+        
+        // Заголовок
         JLabel title = new JLabel("Управление товарами", SwingConstants.CENTER);
         title.setFont(new Font("Arial", Font.BOLD, 20));
         panel.add(title, BorderLayout.NORTH);
 
-        String[] columnNames = {"ID", "Наименование", "Описание", "Количество", "Цена", "Поставщик", "Дата добавления", "Кто добавил", "Дата изменения", "Кто изменил"};
-        DefaultTableModel model = new DefaultTableModel(loadProductsFromDB(), columnNames) {
+        // Таблица товаров
+        String[] columnNames = {"ID", "Название", "Описание", "Цена", "Количество", "Поставщик", "Дата добавления", "Кто добавил", "Дата изменения", "Кто изменил"};
+        DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -127,96 +140,256 @@ public class AdminWindow extends JFrame {
         };
         productsTable = new JTable(model);
         productsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-
-        for (int i = 0; i < productsTable.getColumnCount(); i++) {
-            productsTable.getColumnModel().getColumn(i).setPreferredWidth(120);
-        }
+        productsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        
+        // Устанавливаем ширину столбцов
+        productsTable.getColumnModel().getColumn(0).setPreferredWidth(50);  // ID
+        productsTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Название
+        productsTable.getColumnModel().getColumn(2).setPreferredWidth(200); // Описание
+        productsTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Цена
+        productsTable.getColumnModel().getColumn(4).setPreferredWidth(100); // Количество
+        productsTable.getColumnModel().getColumn(5).setPreferredWidth(150); // Поставщик
+        productsTable.getColumnModel().getColumn(6).setPreferredWidth(150); // Дата добавления
+        productsTable.getColumnModel().getColumn(7).setPreferredWidth(150); // Кто добавил
+        productsTable.getColumnModel().getColumn(8).setPreferredWidth(150); // Дата изменения
+        productsTable.getColumnModel().getColumn(9).setPreferredWidth(150); // Кто изменил
 
         JScrollPane scrollPane = new JScrollPane(productsTable);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         panel.add(scrollPane, BorderLayout.CENTER);
 
+        // Панель с кнопками
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton addButton = new JButton("Добавить");
+        JButton refreshButton = new JButton("Обновить");
+        JButton addButton = new JButton("Добавить товар");
         JButton editButton = new JButton("Редактировать");
         JButton deleteButton = new JButton("Удалить");
-        JButton columnsButton = new JButton("Управление столбцами");
-        JButton filterButton = new JButton("Фильтр");
 
-        addButton.addActionListener(e -> showAddDialog());
-        editButton.addActionListener(e -> showEditDialog());
-        deleteButton.addActionListener(e -> deleteSelectedRow());
-        columnsButton.addActionListener(e -> showColumnsManagementDialog());
-        filterButton.addActionListener(e -> showFilterDialog());
+        refreshButton.addActionListener(e -> {
+            loadProductsData();
+            Logger.log("Обновлены данные товаров");
+        });
+        addButton.addActionListener(e -> showAddProductDialog());
+        editButton.addActionListener(e -> showEditProductDialog());
+        deleteButton.addActionListener(e -> deleteSelectedProduct());
 
+        buttonPanel.add(refreshButton);
         buttonPanel.add(addButton);
         buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
-        buttonPanel.add(columnsButton);
-        buttonPanel.add(filterButton);
-
         panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Загружаем данные
+        loadProductsData();
 
         return panel;
     }
 
     private JPanel createOrdersPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        JLabel label = new JLabel("Панель заказов", SwingConstants.CENTER);
-        label.setFont(new Font("Arial", Font.BOLD, 24));
-        panel.add(label, BorderLayout.NORTH);
+        
+        // Заголовок
+        JLabel title = new JLabel("Управление заказами", SwingConstants.CENTER);
+        title.setFont(new Font("Arial", Font.BOLD, 20));
+        panel.add(title, BorderLayout.NORTH);
 
-        // Здесь можно добавить таблицу заказов и другие элементы управления
-        ordersTable = new JTable();
+        // Таблица заказов
+        String[] columnNames = {"ID", "ID клиента", "Дата заказа", "Сумма", "Статус", "Последнее обновление"};
+        DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        ordersTable = new JTable(model);
+        ordersTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        
+        // Устанавливаем ширину столбцов
+        ordersTable.getColumnModel().getColumn(0).setPreferredWidth(50);   // ID
+        ordersTable.getColumnModel().getColumn(1).setPreferredWidth(100);  // ID клиента
+        ordersTable.getColumnModel().getColumn(2).setPreferredWidth(150);  // Дата заказа
+        ordersTable.getColumnModel().getColumn(3).setPreferredWidth(100);  // Сумма
+        ordersTable.getColumnModel().getColumn(4).setPreferredWidth(100);  // Статус
+        ordersTable.getColumnModel().getColumn(5).setPreferredWidth(150);  // Последнее обновление
+
         JScrollPane scrollPane = new JScrollPane(ordersTable);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         panel.add(scrollPane, BorderLayout.CENTER);
 
-        // Кнопка возвращения к главному окну (опционально)
-        JButton backButton = new JButton("Вернуться к главному меню");
-        backButton.addActionListener(e -> returnToMainWindow());
-        panel.add(backButton, BorderLayout.SOUTH);
+        // Панель с кнопками
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton refreshButton = new JButton("Обновить");
+        JButton addButton = new JButton("Добавить заказ");
+        JButton editButton = new JButton("Редактировать");
+        JButton deleteButton = new JButton("Удалить");
 
-        // Загрузка данных заказов (если есть метод загрузки)
+        refreshButton.addActionListener(e -> {
+            loadOrdersData();
+            Logger.log("Обновлены данные заказов");
+        });
+        addButton.addActionListener(e -> showAddOrderDialog());
+        editButton.addActionListener(e -> showEditOrderDialog());
+        deleteButton.addActionListener(e -> deleteSelectedOrder());
+
+        buttonPanel.add(refreshButton);
+        buttonPanel.add(addButton);
+        buttonPanel.add(editButton);
+        buttonPanel.add(deleteButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Загружаем данные
         loadOrdersData();
 
         return panel;
     }
 
-    private Object[][] loadProductsFromDB() {
-        return loadProductsFromDB(null, null, null, null, null, null, null);
+    private JPanel createLogsPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        
+        // Заголовок
+        JLabel title = new JLabel("Журнал действий", SwingConstants.CENTER);
+        title.setFont(new Font("Arial", Font.BOLD, 20));
+        panel.add(title, BorderLayout.NORTH);
+
+        // Таблица логов
+        String[] columnNames = {"Дата", "Действие", "Пользователь"};
+        DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable logsTable = new JTable(model);
+        JScrollPane scrollPane = new JScrollPane(logsTable);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        // Панель с кнопками
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton refreshButton = new JButton("Обновить");
+        JButton exportButton = new JButton("Экспорт в файл");
+
+        refreshButton.addActionListener(e -> loadLogsData(logsTable));
+        exportButton.addActionListener(e -> exportLogsToFile());
+
+        buttonPanel.add(refreshButton);
+        buttonPanel.add(exportButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Загружаем данные
+        loadLogsData(logsTable);
+
+        return panel;
+    }
+
+    private void loadLogsData(JTable logsTable) {
+        try {
+            File logFile = new File("actions.log");
+            if (!logFile.exists()) {
+                return;
+            }
+
+            DefaultTableModel model = (DefaultTableModel) logsTable.getModel();
+            model.setRowCount(0);
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length >= 3) {
+                        model.addRow(new Object[]{
+                            parts[0], // Дата
+                            parts[1], // Действие
+                            parts[2]  // Пользователь
+                        });
+                    }
+                }
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Ошибка чтения логов: " + e.getMessage());
+        }
+    }
+
+    private void exportLogsToFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Сохранить логи");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Текстовые файлы", "txt"));
+        
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".txt")) {
+                file = new File(file.getAbsolutePath() + ".txt");
+            }
+            
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                File logFile = new File("actions.log");
+                if (logFile.exists()) {
+                    try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            writer.write(line);
+                            writer.newLine();
+                        }
+                    }
+                }
+                JOptionPane.showMessageDialog(this, "Логи успешно экспортированы в файл: " + file.getName());
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Ошибка экспорта логов: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadProductsData() {
+        DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
+        model.setRowCount(0);
+        
+        try {
+            List<Object[]> products = productDAO.getAllProducts();
+            for (Object[] productData : products) {
+                model.addRow(new Object[]{
+                    productData[0], // ID
+                    productData[1], // Название
+                    productData[2], // Описание
+                    productData[3], // Количество
+                    productData[4], // Цена
+                    productData[5], // Поставщик
+                    productData[6], // Дата добавления
+                    productData[7]  // Кто добавил
+                });
+            }
+            Logger.log("Загружены данные товаров: " + products.size() + " записей");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                "Ошибка загрузки данных товаров: " + e.getMessage(),
+                "Ошибка",
+                JOptionPane.ERROR_MESSAGE);
+            Logger.logError("Ошибка загрузки данных товаров", e);
+        }
     }
 
     private Object[][] loadProductsFromDB(String name, String startDate, String endDate, String addedBy, String minQuantity, String maxQuantity, String supplier) {
-        try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
-             AddUser addUser = new AddUser(DBmanager.getConnection())) {
-            List<Product> products = productDao.getProductsByFilters(name, startDate, endDate, addedBy, minQuantity, maxQuantity, supplier);
-            Object[][] data = new Object[products.size()][10];
+        try {
+            List<Product> products = productDAO.getProductsByFilters(name, startDate, endDate, addedBy, minQuantity, maxQuantity, supplier);
+            Object[][] data = new Object[products.size()][];
             for (int i = 0; i < products.size(); i++) {
-                Product product = products.get(i);
-                User addedByUser = addUser.findById(product.getAdded_by());
-                User modifiedByUser = addUser.findById(product.getModified_by());
-                data[i][0] = product.getId(); // Fix the getter method name for product ID
-                data[i][1] = product.getName();
-                data[i][2] = product.getDescription() != null ? product.getDescription() : "";
-                data[i][3] = product.getQuantity();
-                data[i][4] = product.getPrice();
-                data[i][5] = product.getSupplier() != null ? product.getSupplier() : "";
-                data[i][6] = product.getAdded_date() != null ? product.getAdded_date() : "";
-                data[i][7] = (addedByUser != null) ? addedByUser.getName() : "Неизвестно";
-                data[i][8] = product.getModified_date() != null ? product.getModified_date() : "";
-                data[i][9] = (modifiedByUser != null) ? modifiedByUser.getName() : "Неизвестно";
+                Product p = products.get(i);
+                data[i] = new Object[]{
+                    p.getId(),
+                    p.getName(),
+                    p.getDescription(),
+                    p.getQuantity(),
+                    p.getPrice(),
+                    p.getSupplier() != null ? p.getSupplier() : "Не указано",
+                    p.getAdded_date(), // Дата добавления
+                    p.getAdded_by() // Кто добавил (ID)
+                };
             }
             return data;
         } catch (SQLException e) {
-            System.err.println("Ошибка загрузки товаров: " + e.getMessage());
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Ошибка загрузки товаров: " + e.getMessage());
-            return new Object[][]{
-                    {1, "Ноутбук Lenovo", "", 5, 45000.0, "ООО Техносила", "2023-10-15", "Иванов", "2023-10-15", "Иванов"},
-                    {2, "Мышь Logitech", "", 20, 1200.0, "DNS", "2023-10-16", "Петров", "2023-10-16", "Петров"},
-                    {3, "Клавиатура Razer", "", 8, 5600.0, "М.Видео", "2023-10-17", "Сидоров", "2023-10-17", "Сидоров"}
-            };
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+            JOptionPane.showMessageDialog(this, "Ошибка фильтрации товаров: " + e.getMessage());
+            return new Object[0][];
         }
     }
 
@@ -242,318 +415,182 @@ public class AdminWindow extends JFrame {
         JOptionPane.showMessageDialog(this, "Поиск: " + query);
     }
 
-    private void showAddDialog() {
+    private void showAddProductDialog() {
+        Logger.log("Открыт диалог добавления товара");
         JDialog dialog = new JDialog(this, "Добавить товар", true);
-        dialog.setSize(300, 400);
-        dialog.setLayout(new GridLayout(6, 2));
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new GridLayout(7, 2, 5, 5));
 
-        JLabel nameLabel = new JLabel("Название:");
         JTextField nameField = new JTextField();
-        JLabel descLabel = new JLabel("Описание:");
-        JTextField descField = new JTextField();
-        JLabel priceLabel = new JLabel("Цена:");
+        JTextField descriptionField = new JTextField();
         JTextField priceField = new JTextField();
-        JLabel quantityLabel = new JLabel("Количество:");
         JTextField quantityField = new JTextField();
-        JLabel categoryLabel = new JLabel("Категория:");
         JTextField categoryField = new JTextField();
+
+        dialog.add(new JLabel("Название:"));
+        dialog.add(nameField);
+        dialog.add(new JLabel("Описание:"));
+        dialog.add(descriptionField);
+        dialog.add(new JLabel("Цена:"));
+        dialog.add(priceField);
+        dialog.add(new JLabel("Количество:"));
+        dialog.add(quantityField);
+        dialog.add(new JLabel("Категория:"));
+        dialog.add(categoryField);
 
         JButton saveButton = new JButton("Сохранить");
         saveButton.addActionListener(e -> {
-            // Validate product name is not empty
-            if (nameField.getText().trim().isEmpty()) {
-                JOptionPane.showMessageDialog(dialog, "Название товара не может быть пустым.", "Ошибка ввода", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-            String name = nameField.getText();
-            String description = descField.getText();
             try {
+                String name = nameField.getText();
+                String description = descriptionField.getText();
                 double price = Double.parseDouble(priceField.getText());
                 int quantity = Integer.parseInt(quantityField.getText());
                 String category = categoryField.getText();
 
-                Product newProduct = new Product(0, name, price, description, "");
-                try {
-                    ProductDAO productDAO = new ProductDAO(DBmanager.getConnection());
-                    productDAO.addProduct(newProduct);
-                    JOptionPane.showMessageDialog(dialog, "Товар успешно добавлен");
-                    loadProductsData();
-                    dialog.dispose();
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(dialog, "Ошибка при добавлении товара: " + ex.getMessage());
-                }
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(dialog, "Пожалуйста, введите корректные числовые значения для цены и количества");
-            }
-        });
-
-        dialog.add(nameLabel);
-        dialog.add(nameField);
-        dialog.add(descLabel);
-        dialog.add(descField);
-        dialog.add(priceLabel);
-        dialog.add(priceField);
-        dialog.add(quantityLabel);
-        dialog.add(quantityField);
-        dialog.add(categoryLabel);
-        dialog.add(categoryField);
-        dialog.add(saveButton);
-
-        dialog.setLocationRelativeTo(this);
-        dialog.setVisible(true);
-    }
-
-    private void showEditDialog() {
-        int selectedRow = productsTable.getSelectedRow();
-        if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Выберите строку для редактирования", "Ошибка", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        JDialog dialog = new JDialog(this, "Редактировать товар", true);
-        dialog.setLayout(new GridBagLayout());
-        dialog.setSize(450, 550);
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-
-        JTextField[] fields = new JTextField[10];
-        String[] labels = {"ID:", "Наименование:", "Описание:", "Количество:", "Цена:", "Поставщик:", "Дата добавления:", "Кто добавил:", "Дата изменения:", "Кто изменил:"};
-        DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
-        int productId = (int) model.getValueAt(selectedRow, 0);
-
-        Product originalProduct = null;
-        try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection())) {
-            List<Product> products = productDao.getAllProducts();
-            for (Product p : products) {
-                if (p.getId() == productId) { // Fix the getter method name for product ID
-                    originalProduct = p;
-                    break;
-                }
-            }
-        } catch (SQLException e) {
-            System.err.println("Ошибка получения продукта: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        for (int i = 0; i < fields.length; i++) {
-            gbc.gridx = 0;
-            gbc.gridy = i;
-            dialog.add(new JLabel(labels[i]), gbc);
-
-            gbc.gridx = 1;
-            Object value = model.getValueAt(selectedRow, i);
-            fields[i] = new JTextField(value != null ? value.toString() : "");
-            if (i == 7 || i == 9) {
-                fields[i].setEditable(false);
-            }
-            dialog.add(fields[i], gbc);
-        }
-
-        JButton saveButton = new JButton("Сохранить");
-        gbc.gridx = 1;
-        gbc.gridy = fields.length;
-        gbc.anchor = GridBagConstraints.EAST;
-        dialog.add(saveButton, gbc);
-
-        Product finalOriginalProduct = originalProduct;
-        saveButton.addActionListener(e -> {
-            try {
-                if (fields[1].getText().trim().isEmpty()) {
-                    JOptionPane.showMessageDialog(dialog, "Product name cannot be empty.", "Input Error", JOptionPane.ERROR_MESSAGE);
+                if (name.isEmpty() || description.isEmpty() || category.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "Все поля должны быть заполнены");
+                    Logger.log("Попытка добавления товара с пустыми полями");
                     return;
                 }
-                Product product = new Product(
-                        Integer.parseInt(fields[0].getText()),
-                        fields[1].getText(),
-                        Double.parseDouble(fields[4].getText()),
-                        fields[2].getText(),
-                        0, // Placeholder for categoryId
-                        Integer.parseInt(fields[3].getText()),
-                        fields[5].getText(),
-                        finalOriginalProduct != null ? finalOriginalProduct.getAdded_by() : user.getUserid(),
-                        fields[6].getText(),
-                        user.getUserid(),
-                        fields[7].getText()
-                );
 
-                try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection());
-                     AddUser addUser = new AddUser(DBmanager.getConnection())) {
-                    productDao.updateProduct(product);
-                    User addedByUser = addUser.findById(product.getAdded_by());
-                    User modifiedByUser = addUser.findById(product.getModified_by());
-                    model.setValueAt(product.getId(), selectedRow, 0); // Fix the getter method name for product ID
-                    model.setValueAt(product.getName(), selectedRow, 1);
-                    model.setValueAt(product.getDescription(), selectedRow, 2);
-                    model.setValueAt(product.getQuantity(), selectedRow, 3);
-                    model.setValueAt(product.getPrice(), selectedRow, 4);
-                    model.setValueAt(product.getSupplier(), selectedRow, 5);
-                    model.setValueAt(product.getAdded_date(), selectedRow, 6);
-                    model.setValueAt((addedByUser != null) ? addedByUser.getName() : "Неизвестно", selectedRow, 7);
-                    model.setValueAt(product.getModified_date(), selectedRow, 8);
-                    model.setValueAt((modifiedByUser != null) ? modifiedByUser.getName() : "Неизвестно", selectedRow, 9);
-                } catch (SQLException ex) {
-                    System.err.println("Ошибка редактирования товара: " + ex.getMessage());
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(this, "Ошибка редактирования товара: " + ex.getMessage());
-                } catch (Exception ex) {
-                    throw new RuntimeException(ex);
-                }
+                Product product = new Product();
+                product.setName(name);
+                product.setDescription(description);
+                product.setPrice(price);
+                product.setQuantity(quantity);
+                product.setCategory(category);
 
+                productDAO.addProduct(product);
+                Logger.log("Добавлен новый товар: " + name);
+                loadProductsData();
                 dialog.dispose();
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(dialog, "Пожалуйста, введите корректные числовые значения для ID, количества и цены.");
+                JOptionPane.showMessageDialog(dialog, "Цена и количество должны быть числами");
+                Logger.log("Ошибка при добавлении товара: неверный формат чисел");
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(dialog, "Ошибка при добавлении товара: " + ex.getMessage());
+                Logger.logError("Ошибка при добавлении товара", ex);
             }
         });
 
-        dialog.setLocationRelativeTo(this);
+        dialog.add(new JLabel()); // Пустая ячейка для выравнивания
+        dialog.add(saveButton);
+
         dialog.setVisible(true);
     }
 
-    private void deleteSelectedRow() {
+    private void showEditProductDialog() {
         int selectedRow = productsTable.getSelectedRow();
         if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Выберите строку для удаления.");
+            JOptionPane.showMessageDialog(this, "Пожалуйста, выберите товар для редактирования");
+            Logger.log("Попытка редактирования товара без выбора");
             return;
         }
 
-        int productId = Integer.parseInt(productsTable.getValueAt(selectedRow, 0).toString());
-        int confirm = JOptionPane.showConfirmDialog(this, "Удалить товар с ID " + productId + "?", "Подтверждение", JOptionPane.YES_NO_OPTION);
+        int productId = (int) productsTable.getValueAt(selectedRow, 0);
+        try {
+            Product product = productDAO.getProductById(productId);
+            if (product == null) {
+                JOptionPane.showMessageDialog(this, "Товар не найден");
+                Logger.log("Попытка редактирования несуществующего товара #" + productId);
+                return;
+            }
+
+            Logger.log("Открыт диалог редактирования товара #" + productId);
+            JDialog dialog = new JDialog(this, "Редактировать товар", true);
+            dialog.setSize(400, 300);
+            dialog.setLocationRelativeTo(this);
+            dialog.setLayout(new GridLayout(7, 2, 5, 5));
+
+            JTextField nameField = new JTextField(product.getName());
+            JTextField descriptionField = new JTextField(product.getDescription());
+            JTextField priceField = new JTextField(String.valueOf(product.getPrice()));
+            JTextField quantityField = new JTextField(String.valueOf(product.getQuantity()));
+            JTextField categoryField = new JTextField(product.getCategory());
+
+            dialog.add(new JLabel("Название:"));
+            dialog.add(nameField);
+            dialog.add(new JLabel("Описание:"));
+            dialog.add(descriptionField);
+            dialog.add(new JLabel("Цена:"));
+            dialog.add(priceField);
+            dialog.add(new JLabel("Количество:"));
+            dialog.add(quantityField);
+            dialog.add(new JLabel("Категория:"));
+            dialog.add(categoryField);
+
+            JButton saveButton = new JButton("Сохранить");
+            saveButton.addActionListener(e -> {
+                try {
+                    String name = nameField.getText();
+                    String description = descriptionField.getText();
+                    double price = Double.parseDouble(priceField.getText());
+                    int quantity = Integer.parseInt(quantityField.getText());
+                    String category = categoryField.getText();
+
+                    if (name.isEmpty() || description.isEmpty() || category.isEmpty()) {
+                        JOptionPane.showMessageDialog(dialog, "Все поля должны быть заполнены");
+                        Logger.log("Попытка сохранения товара с пустыми полями");
+                        return;
+                    }
+
+                    product.setName(name);
+                    product.setDescription(description);
+                    product.setPrice(price);
+                    product.setQuantity(quantity);
+                    product.setCategory(category);
+
+                    productDAO.updateProduct(product);
+                    Logger.log("Обновлен товар #" + productId + ": " + name);
+                    loadProductsData();
+                    dialog.dispose();
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(dialog, "Цена и количество должны быть числами");
+                    Logger.log("Ошибка при обновлении товара: неверный формат чисел");
+                } catch (SQLException ex) {
+                    JOptionPane.showMessageDialog(dialog, "Ошибка при обновлении товара: " + ex.getMessage());
+                    Logger.logError("Ошибка при обновлении товара #" + productId, ex);
+                }
+            });
+
+            dialog.add(new JLabel());
+            dialog.add(saveButton);
+
+            dialog.setVisible(true);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка при получении данных товара: " + ex.getMessage());
+            Logger.logError("Ошибка при получении данных товара #" + productId, ex);
+        }
+    }
+
+    private void deleteSelectedProduct() {
+        int selectedRow = productsTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, выберите товар для удаления");
+            Logger.log("Попытка удаления товара без выбора");
+            return;
+        }
+
+        int productId = (int) productsTable.getValueAt(selectedRow, 0);
+        String productName = (String) productsTable.getValueAt(selectedRow, 1);
+        
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Вы уверены, что хотите удалить товар \"" + productName + "\"?",
+            "Подтверждение удаления",
+            JOptionPane.YES_NO_OPTION);
 
         if (confirm == JOptionPane.YES_OPTION) {
-            try (ProductDAO productDao = new ProductDAO(DBmanager.getConnection())) {
-                productDao.deleteProduct(productId);
-                ((DefaultTableModel) productsTable.getModel()).removeRow(selectedRow);
-            } catch (SQLException e) {
-                System.err.println("Ошибка удаления товара: " + e.getMessage());
-                e.printStackTrace();
-                JOptionPane.showMessageDialog(this, "Ошибка удаления товара: " + e.getMessage());
+            try {
+                productDAO.deleteProduct(productId);
+                Logger.log("Удален товар #" + productId + ": " + productName);
+                loadProductsData();
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка при удалении товара: " + ex.getMessage());
+                Logger.logError("Ошибка при удалении товара #" + productId, ex);
             }
-        }
-    }
-
-    private void showColumnsManagementDialog() {
-        JDialog dialog = new JDialog(this, "Управление столбцами", true);
-        dialog.setLayout(new BorderLayout());
-
-        DefaultTableModel model = (DefaultTableModel) productsTable.getModel();
-        DefaultListModel<String> listModel = new DefaultListModel<>();
-        for (int i = 0; i < model.getColumnCount(); i++) {
-            listModel.addElement(model.getColumnName(i));
-        }
-
-        JList<String> columnsList = new JList<>(listModel);
-        columnsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-        JPanel controlPanel = new JPanel(new GridLayout(1, 5, 5, 5));
-        JButton addButton = new JButton("Добавить");
-        JButton renameButton = new JButton("Переименовать");
-        JButton removeButton = new JButton("Удалить");
-        JButton upButton = new JButton("Вверх");
-        JButton downButton = new JButton("Вниз");
-
-        addButton.addActionListener(e -> {
-            String newName = JOptionPane.showInputDialog(dialog, "Введите название нового столбца:");
-            if (newName != null && !newName.trim().isEmpty()) {
-                listModel.addElement(newName);
-            }
-        });
-
-        renameButton.addActionListener(e -> {
-            int selected = columnsList.getSelectedIndex();
-            if (selected >= 0) {
-                String newName = JOptionPane.showInputDialog(dialog, "Новое название:", listModel.getElementAt(selected));
-                if (newName != null && !newName.trim().isEmpty()) {
-                    listModel.set(selected, newName);
-                }
-            }
-        });
-
-        removeButton.addActionListener(e -> {
-            int selected = columnsList.getSelectedIndex();
-            if (selected >= 0 && listModel.size() > 1) {
-                listModel.remove(selected);
-            } else {
-                JOptionPane.showMessageDialog(dialog, "Нельзя удалить последний столбец!", "Ошибка", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
-        upButton.addActionListener(e -> {
-            int selected = columnsList.getSelectedIndex();
-            if (selected > 0) {
-                String item = listModel.remove(selected);
-                listModel.add(selected - 1, item);
-                columnsList.setSelectedIndex(selected - 1);
-            }
-        });
-
-        downButton.addActionListener(e -> {
-            int selected = columnsList.getSelectedIndex();
-            if (selected >= 0 && selected < listModel.size() - 1) {
-                String item = listModel.remove(selected);
-                listModel.add(selected + 1, item);
-                columnsList.setSelectedIndex(selected + 1);
-            }
-        });
-
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton saveButton = new JButton("Сохранить");
-        JButton cancelButton = new JButton("Отмена");
-
-        saveButton.addActionListener(e -> {
-            updateTableColumns(listModel);
-            dialog.dispose();
-        });
-
-        cancelButton.addActionListener(e -> dialog.dispose());
-
-        controlPanel.add(addButton);
-        controlPanel.add(renameButton);
-        controlPanel.add(removeButton);
-        controlPanel.add(upButton);
-        controlPanel.add(downButton);
-
-        bottomPanel.add(cancelButton);
-        bottomPanel.add(saveButton);
-
-        dialog.add(new JScrollPane(columnsList), BorderLayout.CENTER);
-        dialog.add(controlPanel, BorderLayout.NORTH);
-        dialog.add(bottomPanel, BorderLayout.SOUTH);
-
-        dialog.setSize(400, 300);
-        dialog.setLocationRelativeTo(this);
-        dialog.setVisible(true);
-    }
-
-    private void updateTableColumns(DefaultListModel<String> newColumns) {
-        DefaultTableModel oldModel = (DefaultTableModel) productsTable.getModel();
-        DefaultTableModel newModel = new DefaultTableModel();
-
-        for (int i = 0; i < newColumns.size(); i++) {
-            newModel.addColumn(newColumns.getElementAt(i));
-        }
-
-        for (int row = 0; row < oldModel.getRowCount(); row++) {
-            Object[] rowData = new Object[newColumns.size()];
-            for (int col = 0; col < newColumns.size(); col++) {
-                String colName = newColumns.getElementAt(col);
-                int oldColIndex = -1;
-                for (int i = 0; i < oldModel.getColumnCount(); i++) {
-                    if (oldModel.getColumnName(i).equals(colName)) {
-                        oldColIndex = i;
-                        break;
-                    }
-                }
-                rowData[col] = oldColIndex >= 0 ? oldModel.getValueAt(row, oldColIndex) : "";
-            }
-            newModel.addRow(rowData);
-        }
-
-        productsTable.setModel(newModel);
-
-        for (int i = 0; i < productsTable.getColumnCount(); i++) {
-            productsTable.getColumnModel().getColumn(i).setPreferredWidth(120);
+        } else {
+            Logger.log("Отменено удаление товара #" + productId);
         }
     }
 
@@ -645,63 +682,48 @@ public class AdminWindow extends JFrame {
     }
 
     private void loadOrdersData() {
-        if (orderDAO == null) {
-            JOptionPane.showMessageDialog(this, "OrderDAO не инициализирован. Проверьте подключение к базе данных.");
-            try {
+        try {
+            if (orderDAO == null) {
+                System.out.println("Инициализация OrderDAO...");
                 orderDAO = new OrderDAO(DBmanager.getConnection());
-            } catch (SQLException e) {
-                JOptionPane.showMessageDialog(this, "Ошибка инициализации OrderDAO: " + e.getMessage());
-                System.err.println("Ошибка инициализации OrderDAO: " + e.getMessage());
-                return;
             }
-        }
-
-        try {
+            System.out.println("Получение списка заказов...");
             List<Object[]> orders = orderDAO.getAllOrders();
-            DefaultTableModel model = new DefaultTableModel();
-            model.setColumnIdentifiers(new Object[]{"ID", "Дата", "Статус", "Клиент"});
-
+            System.out.println("Получено заказов: " + orders.size());
+            
+            DefaultTableModel model = (DefaultTableModel) ordersTable.getModel();
+            model.setRowCount(0);
+            
             for (Object[] order : orders) {
-                model.addRow(new Object[]{
-                    order[0], // ID
-                    order[1], // Дата
-                    order[2], // Статус
-                    order[3]  // Клиент
-                });
+                if (order == null) {
+                    System.out.println("Пропущен null заказ");
+                    continue;
+                }
+                System.out.println("Добавление заказа: " + java.util.Arrays.toString(order));
+                try {
+                    model.addRow(order);
+                } catch (Exception e) {
+                    System.err.println("Ошибка при добавлении строки в таблицу: " + e.getMessage());
+                    e.printStackTrace();
+                }
             }
-
-            ordersTable.setModel(model);
-            System.out.println("Данные заказов загружены: " + orders.size() + " записей");
+            Logger.log("Загружены данные заказов: " + orders.size() + " записей");
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных заказов: " + e.getMessage());
-            System.err.println("Ошибка загрузки данных заказов: " + e.getMessage());
-        }
-    }
-
-    private void loadProductsData() {
-        try {
-            if (productDAO == null) {
-                productDAO = new ProductDAO(DBmanager.getConnection());
-            }
-            List<Product> products = productDAO.getAllProducts();
-            DefaultTableModel model = new DefaultTableModel();
-            model.setColumnIdentifiers(new Object[]{"ID", "Название", "Описание", "Количество", "Цена"});
-
-            for (Product product : products) {
-                model.addRow(new Object[]{
-                    product.getId(), // Fix the getter method name for product ID
-                    product.getName(),
-                    product.getDescription(),
-                    product.getQuantity(),
-                    product.getPrice()
-                });
-            }
-
-            productsTable.setModel(model);
-            System.out.println("Данные товаров загружены: " + products.size() + " записей");
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Ошибка загрузки данных товаров: " + e.getMessage());
-            System.err.println("Ошибка загрузки данных товаров: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("Ошибка при загрузке заказов: " + e.getMessage());
+            JOptionPane.showMessageDialog(this,
+                "Ошибка при загрузке заказов: " + e.getMessage(),
+                "Ошибка",
+                JOptionPane.ERROR_MESSAGE);
+            Logger.log("Ошибка при загрузке заказов: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Неожиданная ошибка: " + e.getMessage());
+            JOptionPane.showMessageDialog(this,
+                "Неожиданная ошибка: " + e.getMessage(),
+                "Ошибка",
+                JOptionPane.ERROR_MESSAGE);
+            Logger.log("Неожиданная ошибка: " + e.getMessage());
         }
     }
 
@@ -713,10 +735,17 @@ public class AdminWindow extends JFrame {
     }
 
     private void logAction(String action) {
+        String logMessage = String.format("Пользователь %s: %s", currentUser.getUsername(), action);
+        System.out.println(logMessage);
         try {
-            mainWindow.logAction(action + " (Администратор: " + currentUser.getUsername() + ")");
-        } catch (Exception e) {
-            System.err.println("Ошибка логирования: " + e.getMessage());
+            File logFile = new File("actions.log");
+            try (FileWriter fw = new FileWriter(logFile, true);
+                 PrintWriter writer = new PrintWriter(fw)) {
+                String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+                writer.println(String.format("[%s] %s", timestamp, logMessage));
+            }
+        } catch (IOException e) {
+            System.err.println("Ошибка при записи в лог: " + e.getMessage());
         }
     }
 
@@ -782,5 +811,231 @@ public class AdminWindow extends JFrame {
             JOptionPane.showMessageDialog(this, "Ошибка при открытии окна заказов: " + e.getMessage(), "Ошибка", JOptionPane.ERROR_MESSAGE);
             logAction("Ошибка при открытии окна заказов: " + e.getMessage());
         }
+    }
+
+    private void showAddOrderDialog() {
+        logAction("Открыт диалог добавления заказа");
+        JDialog dialog = new JDialog(this, "Добавить заказ", true);
+        dialog.setSize(400, 300);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel formPanel = new JPanel(new GridLayout(5, 2, 5, 5));
+        JTextField clientIdField = new JTextField();
+        JTextField totalCostField = new JTextField();
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"Новый", "В обработке", "Выполнен", "Отменен"});
+
+        formPanel.add(new JLabel("ID клиента:"));
+        formPanel.add(clientIdField);
+        formPanel.add(new JLabel("Сумма:"));
+        formPanel.add(totalCostField);
+        formPanel.add(new JLabel("Статус:"));
+        formPanel.add(statusCombo);
+
+        JButton saveButton = new JButton("Сохранить");
+        saveButton.addActionListener(e -> {
+            try {
+                int clientId = Integer.parseInt(clientIdField.getText());
+                double totalCost = Double.parseDouble(totalCostField.getText());
+                String status = (String) statusCombo.getSelectedItem();
+
+                Order newOrder = new Order();
+                newOrder.setClientId(clientId);
+                newOrder.setTotalCost(totalCost);
+                newOrder.setStatus(status);
+                newOrder.setOrderDate(new Date());
+                newOrder.setLastUpdated(new Date().toString());
+
+                orderDAO.addOrder(newOrder);
+                loadOrdersData();
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Пожалуйста, введите корректные числовые значения");
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(dialog, "Ошибка добавления заказа: " + ex.getMessage());
+            }
+        });
+
+        dialog.add(formPanel, BorderLayout.CENTER);
+        dialog.add(saveButton, BorderLayout.SOUTH);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private void showEditOrderDialog() {
+        int selectedRow = ordersTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this,
+                "Пожалуйста, выберите заказ для редактирования",
+                "Предупреждение",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int orderId = (int) ordersTable.getValueAt(selectedRow, 0);
+        String currentStatus = (String) ordersTable.getValueAt(selectedRow, 3);
+
+        String[] statuses = {"Новый", "В обработке", "Выполнен", "Отменен"};
+        String newStatus = (String) JOptionPane.showInputDialog(
+            this,
+            "Выберите новый статус заказа:",
+            "Изменение статуса заказа",
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+            statuses,
+            currentStatus
+        );
+
+        if (newStatus != null && !newStatus.equals(currentStatus)) {
+            try {
+                Order updatedOrder = new Order();
+                updatedOrder.setId(orderId);
+                updatedOrder.setStatus(newStatus);
+                updatedOrder.setClientId((int) ordersTable.getValueAt(selectedRow, 1));
+                updatedOrder.setTotalCost((double) ordersTable.getValueAt(selectedRow, 2));
+                
+                orderDAO.updateOrder(updatedOrder, currentUserId);
+                loadOrdersData();
+                Logger.log("Обновлен статус заказа " + orderId + " на " + newStatus);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Ошибка при обновлении заказа: " + ex.getMessage(),
+                    "Ошибка",
+                    JOptionPane.ERROR_MESSAGE);
+                Logger.log("Ошибка при обновлении заказа: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void deleteSelectedOrder() {
+        int selectedRow = ordersTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, выберите заказ для удаления", 
+                "Предупреждение", JOptionPane.WARNING_MESSAGE);
+            logAction("Попытка удаления заказа без выбора");
+            return;
+        }
+
+        int orderId = (int) ordersTable.getValueAt(selectedRow, 0);
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Вы уверены, что хотите удалить заказ #" + orderId + "?",
+            "Подтверждение удаления",
+            JOptionPane.YES_NO_OPTION);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                orderDAO.deleteOrder(orderId);
+                logAction("Удален заказ #" + orderId);
+                loadOrdersData();
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка при удалении заказа: " + ex.getMessage(),
+                    "Ошибка", JOptionPane.ERROR_MESSAGE);
+                logAction("Ошибка при удалении заказа #" + orderId + ": " + ex.getMessage());
+            }
+        } else {
+            logAction("Отменено удаление заказа #" + orderId);
+        }
+    }
+
+    private void showOrderDetails() {
+        int selectedRow = ordersTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Пожалуйста, выберите заказ для просмотра деталей", 
+                "Предупреждение", JOptionPane.WARNING_MESSAGE);
+            logAction("Попытка просмотра деталей заказа без выбора");
+            return;
+        }
+
+        int orderId = (int) ordersTable.getValueAt(selectedRow, 0);
+        try {
+            List<Object[]> items = orderDAO.getOrderItems(orderId);
+            if (items.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "В заказе нет товаров", 
+                    "Информация", JOptionPane.INFORMATION_MESSAGE);
+                logAction("Просмотр пустого заказа #" + orderId);
+                return;
+            }
+
+            logAction("Просмотр деталей заказа #" + orderId + " (" + items.size() + " товаров)");
+            // Создаем диалог с деталями заказа
+            JDialog dialog = new JDialog(this, "Детали заказа #" + orderId, true);
+            dialog.setLayout(new BorderLayout());
+
+            // Создаем таблицу с товарами
+            String[] columnNames = {"ID", "Товар", "Количество", "Цена за ед.", "Сумма"};
+            DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;
+                }
+            };
+
+            JTable itemsTable = new JTable(model);
+            double totalSum = 0.0;
+
+            for (Object[] item : items) {
+                double itemSum = (int)item[2] * (double)item[3]; // quantity * price
+                totalSum += itemSum;
+                model.addRow(new Object[]{
+                    item[0], // ID
+                    item[1], // Название товара
+                    item[2], // Количество
+                    String.format("%.2f ₽", (double)item[3]), // Цена за единицу
+                    String.format("%.2f ₽", itemSum) // Общая сумма по товару
+                });
+            }
+
+            JScrollPane scrollPane = new JScrollPane(itemsTable);
+            dialog.add(scrollPane, BorderLayout.CENTER);
+
+            // Добавляем итоговую сумму
+            JPanel summaryPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            summaryPanel.add(new JLabel(String.format("Итого: %.2f ₽", totalSum)));
+            dialog.add(summaryPanel, BorderLayout.SOUTH);
+
+            dialog.setSize(600, 400);
+            dialog.setLocationRelativeTo(this);
+            dialog.setVisible(true);
+
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка при получении деталей заказа: " + ex.getMessage(),
+                "Ошибка", JOptionPane.ERROR_MESSAGE);
+            logAction("Ошибка при получении деталей заказа #" + orderId + ": " + ex.getMessage());
+        }
+    }
+
+    private void createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        
+        // Меню "Файл"
+        JMenu fileMenu = new JMenu("Файл");
+        JMenuItem exitItem = new JMenuItem("Выход");
+        exitItem.addActionListener(e -> System.exit(0));
+        fileMenu.add(exitItem);
+        
+        // Меню "Справка"
+        JMenu helpMenu = new JMenu("Справка");
+        JMenuItem aboutItem = new JMenuItem("О программе");
+        aboutItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(this,
+                "Система управления складом\nВерсия 1.0",
+                "О программе",
+                JOptionPane.INFORMATION_MESSAGE);
+        });
+        helpMenu.add(aboutItem);
+
+        // Меню "Журнал"
+        JMenu logMenu = new JMenu("Журнал");
+        JMenuItem showLogItem = new JMenuItem("Показать журнал действий");
+        showLogItem.addActionListener(e -> {
+            LogsWindow logWindow = new LogsWindow();
+            logWindow.setVisible(true);
+        });
+        logMenu.add(showLogItem);
+        
+        menuBar.add(fileMenu);
+        menuBar.add(helpMenu);
+        menuBar.add(logMenu);
+        
+        setJMenuBar(menuBar);
     }
 }

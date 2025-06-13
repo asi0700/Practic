@@ -77,6 +77,17 @@ public class AddUser implements AutoCloseable {
         );
     }
 
+    public int countAdmins() throws SQLException {
+        String sql = "SELECT COUNT(*) FROM Users WHERE role = 'admin'";
+        try (PreparedStatement stmt = connection.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
     @Override
     public void close() throws Exception {
         if (connection != null && !connection.isClosed()) {

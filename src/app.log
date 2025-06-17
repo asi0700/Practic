@@ -1,0 +1,3 @@
+[2025-06-13 14:17:15] INFO: Запуск приложения
+[2025-06-13 14:17:16] ERROR: Ошибка инициализации базы данных
+No suitable driver found for jdbc:mysql://sql8.freesqldatabase.com:3306/sql8784448?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC

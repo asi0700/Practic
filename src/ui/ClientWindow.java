@@ -66,7 +66,7 @@ public class ClientWindow extends JFrame {
 
     public ClientWindow(User user, MainWindow mainWindow) {
         this.currentUser = user;
-        this.mainWindow = mainWindow;
+        this.mainWindow = this.mainWindow;
         this.cart = new ArrayList<>();
         this.notificationManager = NotificationManager.getInstance();
         
@@ -204,7 +204,7 @@ public class ClientWindow extends JFrame {
                         dispose();
 
                         SwingUtilities.invokeLater(() -> {
-                            Registration registration = new Registration();
+                            registration registration = new registration();
                             registration.setVisible(true);
                         });
                     } catch (Exception ex) {

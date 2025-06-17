@@ -16,13 +16,11 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.io.Serializable;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -41,7 +39,6 @@ import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -82,7 +79,7 @@ public class AdminWindow extends JFrame implements Serializable {
             throw new IllegalArgumentException("Пользователь не может быть null");
         }
         this.currentUser = user;
-        this.mainWindow = mainWindow;
+        this.mainWindow = this.mainWindow;
         this.currentUserId = user.getUserid();
         this.currentUsername = user.getUsername();
         

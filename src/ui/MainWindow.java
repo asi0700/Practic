@@ -5,10 +5,7 @@ import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.GridLayout;
-import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,9 +16,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JMenu;
 import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -37,7 +32,6 @@ import Dao_db.UserDAO;
 import adminUI.AdminWindow;
 import adminUI.CommonMenuBar;
 import model.Order;
-import model.Product;
 import model.User;
 import utils.Logger;
 import workerUI.WorkerWindow;
@@ -209,7 +203,7 @@ public class MainWindow extends JFrame {
 
     private void openRegistrationWindow() {
         hideNavigation();
-        Registration registrationWindow = new Registration();
+        registration registrationWindow = new registration();
         registrationWindow.setVisible(true);
         dispose();
     }
@@ -303,17 +297,18 @@ public class MainWindow extends JFrame {
     private void handleLoginSuccess(String username, String role) {
         Logger.log("Успешный вход в систему: " + username + " с ролью: " + role);
         
-        // Создаем объект User с данными, которые получили
+
         User user = new User(0, username, "", role, username, "", "", "", "", null);
 
+        MainWindow mainWindow = null;
         if (role.equals("admin")) {
-            AdminWindow adminWindow = new AdminWindow(user, this);
+            AdminWindow adminWindow = new AdminWindow(user, mainWindow);
             adminWindow.setVisible(true);
         } else if (role.equals("worker")) {
             WorkerWindow workerWindow = new WorkerWindow(conn, username, this);
             workerWindow.setVisible(true);
         } else {
-            ClientWindow clientWindow = new ClientWindow(user, this);
+            ClientWindow clientWindow = new ClientWindow(user, mainWindow);
             clientWindow.setVisible(true);
         }
         dispose();

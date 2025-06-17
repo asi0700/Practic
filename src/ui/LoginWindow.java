@@ -6,7 +6,7 @@ import java.sql.SQLException;
 import Dao_db.AddUser;
 import DBobject.DBmanager;
 import adminUI.AdminWindow;
-import ui.ClientWindow;
+import ui.registration;
 import model.User;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
@@ -60,10 +60,11 @@ public class LoginWindow extends JFrame {
 
                 System.out.println("Роль пользователя: " + user.getRole());
 
+                MainWindow mainWindow = null;
                 if ("admin".equalsIgnoreCase(user.getRole())) {
-                    new AdminWindow(user).setVisible(true);
+                    new AdminWindow(user, mainWindow).setVisible(true);
                 } else {
-                    new ClientWindow(user).setVisible(true);
+                    new ClientWindow(user, mainWindow).setVisible(true);
                 }
             } else {
                 JOptionPane.showMessageDialog(this, "Неверный пароль!");

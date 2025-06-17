@@ -23,13 +23,13 @@ import adminUI.CommonMenuBar;
 import model.User;
 import workerUI.WorkerWindow;
 
-public class Registration extends JFrame {
+public class registration extends JFrame {
     private JTextField usernameField, nameField, phoneField, addressField;
     private JPasswordField passwordField;
     private JButton registerButton, loginButton;
     private AddUser userDao;
 
-    public Registration() {
+    public registration() {
         setTitle("Регистрация - Склад-Мастер");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(400, 350);
@@ -92,7 +92,7 @@ public class Registration extends JFrame {
             return;
         }
 
-        // Роль всегда 'client'
+
         String role = "client";
         try (AddUser userDao = new AddUser(DBmanager.getConnection())) {
             String hashedPassword = hashPassword(password);

@@ -1,10 +1,8 @@
 package ui;
 
-import ui.registration;
-import ui.LoginWindow;
 import javax.swing.*;
 import java.awt.*;
-
+import ui.Registration;
 
 public class ExitWindow extends JFrame {
     public ExitWindow() {
@@ -19,7 +17,7 @@ public class ExitWindow extends JFrame {
 
         JButton yesButton = new JButton("Да");
         yesButton.addActionListener(e -> {
-            registration registrationWindow = new registration();
+            Registration registrationWindow = new Registration();
             registrationWindow.setVisible(true);
             dispose();
             JFrame mainFrame = (JFrame) SwingUtilities.getWindowAncestor((Component) e.getSource());

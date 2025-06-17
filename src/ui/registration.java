@@ -1,25 +1,35 @@
 package ui;
 
-import javax.swing.*;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.GridLayout;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.security.MessageDigest;
-import java.nio.charset.StandardCharsets;
-import Dao_db.AddUser;
-import DBobject.DBmanager;
-import adminUI.AdminWindow;
-import model.User;
 
-public class registration extends JFrame {
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+
+import DBobject.DBmanager;
+import Dao_db.AddUser;
+import adminUI.AdminWindow;
+import adminUI.CommonMenuBar;
+import model.User;
+import workerUI.WorkerWindow;
+
+public class Registration extends JFrame {
     private JTextField usernameField, nameField, phoneField, addressField;
     private JPasswordField passwordField;
-    private JTextField roleField;
     private JButton registerButton, loginButton;
     private AddUser userDao;
 
-    public registration() {
+    public Registration() {
         setTitle("Регистрация - Склад-Мастер");
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setSize(400, 350);
@@ -42,11 +52,7 @@ public class registration extends JFrame {
         passwordField = new JPasswordField(15);
         inputPanel.add(passwordField);
 
-        inputPanel.add(new JLabel("Роль (Client/Worker/Admin):"));
-        roleField = new JTextField(15);
-        inputPanel.add(roleField);
-
-        inputPanel.add(new JLabel("Имя:"));
+        inputPanel.add(new JLabel("Ваша настоящая имя:"));
         nameField = new JTextField(15);
         inputPanel.add(nameField);
 
@@ -73,7 +79,6 @@ public class registration extends JFrame {
     private void registerUser() {
         String username = usernameField.getText();
         String password = new String(passwordField.getPassword());
-        String role = roleField.getText();
         String name = nameField.getText();
         String phone = phoneField.getText().isEmpty() ? null : phoneField.getText();
         String address = addressField.getText().isEmpty() ? null : addressField.getText();
@@ -82,16 +87,18 @@ public class registration extends JFrame {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String registrationDate = currentDate.format(formatter);
 
-        if (username.isEmpty() || password.isEmpty() || role.isEmpty() || name.isEmpty()) {
+        if (username.isEmpty() || password.isEmpty() || name.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Заполните все обязательные поля!");
             return;
         }
 
-        String hashedPassword = hashPassword(password);
-        User user = new User(0, username, hashedPassword, role, name, phone, address, registrationDate);
-
+        // Роль всегда 'client'
+        String role = "client";
         try (AddUser userDao = new AddUser(DBmanager.getConnection())) {
-            userDao.addUser(user);
+            String hashedPassword = hashPassword(password);
+            User newUser = new User(0, username, hashedPassword, role, name, phone, address, registrationDate, "", null);
+
+            userDao.addUser(newUser);
             JOptionPane.showMessageDialog(this, "Регистрация успешна!");
             clearFields();
             User registeredUser = userDao.findByUsername(username);
@@ -99,9 +106,14 @@ public class registration extends JFrame {
                 dispose();
                 System.out.println("Роль зарегистрированного пользователя: " + registeredUser.getRole());
                 if ("admin".equalsIgnoreCase(registeredUser.getRole())) {
-                    new AdminWindow(registeredUser).setVisible(true);
+                    openAdminWindow(registeredUser, null);
+                } else if ("worker".equalsIgnoreCase(registeredUser.getRole())) {
+                    MainWindow mainWindow = new MainWindow(registeredUser);
+                    WorkerWindow workerWindow = new WorkerWindow(DBmanager.getConnection(), registeredUser.getUsername(), mainWindow);
+                    workerWindow.setVisible(true);
+                    mainWindow.setVisible(true);
                 } else {
-                    new ClientWindow(registeredUser).setVisible(true);
+                    openClientWindow(registeredUser, null);
                 }
             }
         } catch (SQLException e) {
@@ -140,9 +152,32 @@ public class registration extends JFrame {
     private void clearFields() {
         usernameField.setText("");
         passwordField.setText("");
-        roleField.setText("");
         nameField.setText("");
         phoneField.setText("");
         addressField.setText("");
+    }
+
+    private void openAdminWindow(User newUser, MainWindow mainWindow) {
+        AdminWindow adminWindow = new AdminWindow(newUser, mainWindow); 
+        adminWindow.setVisible(true);
+        dispose();
+    }
+
+    private void openClientWindow(User newUser, MainWindow mainWindow) {
+        ClientWindow clientWindow = new ClientWindow(newUser, mainWindow);
+        clientWindow.setVisible(true);
+        dispose();
+    }
+
+    private void createMenuBar() {
+        CommonMenuBar menuBar = new CommonMenuBar(
+            this,
+            (e) -> dispose(),
+            (e) -> {},
+            (e) -> {},
+            (e) -> {},
+            ""
+        );
+        setJMenuBar(menuBar);
     }
 }

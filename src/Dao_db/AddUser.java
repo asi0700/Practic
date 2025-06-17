@@ -6,6 +6,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AddUser implements AutoCloseable {
 
@@ -16,7 +18,7 @@ public class AddUser implements AutoCloseable {
     }
 
     public void addUser(User user) throws SQLException {
-        String sql = "INSERT INTO Users (username, password, role, name, phone, address, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO Users (username, password, role, name, phone, address, registration_date, photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, user.getUsername());
             stmt.setString(2, user.getPassword());
@@ -25,6 +27,7 @@ public class AddUser implements AutoCloseable {
             stmt.setString(5, user.getPhone());
             stmt.setString(6, user.getAddress());
             stmt.setString(7, user.getRegistrationDate());
+            stmt.setBytes(8, user.getPhoto());
             stmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println("Ошибка при добавлении пользователя: " + e.getMessage());
@@ -73,12 +76,37 @@ public class AddUser implements AutoCloseable {
                 rs.getString("name"),
                 rs.getString("phone"),
                 rs.getString("address"),
-                rs.getString("registration_date")
+                rs.getString("registration_date"),
+                rs.getString("photo_path"),
+                rs.getBytes("photo")
         );
     }
 
+    public int countAdmins() throws SQLException {
+        String sql = "SELECT COUNT(*) FROM Users WHERE role = 'admin'";
+        try (PreparedStatement stmt = connection.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        return 0;
+    }
+
+    public List<User> getAllUsers() throws SQLException {
+        List<User> users = new ArrayList<>();
+        String sql = "SELECT * FROM Users ORDER BY username";
+        try (PreparedStatement stmt = connection.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                users.add(buildUser(rs));
+            }
+        }
+        return users;
+    }
+
     @Override
-    public void close() throws Exception {
+    public void close() throws SQLException {
         if (connection != null && !connection.isClosed()) {
             connection.close();
         }

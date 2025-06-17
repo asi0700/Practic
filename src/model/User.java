@@ -9,8 +9,10 @@ public class User {
     private String phone;
     private String address;
     private String registrationDate;
+    private String photoPath;
+    private byte[] photo;
 
-    public User(int userId, String username, String password, String role, String name, String phone, String address, String registrationDate){
+    public User(int userId, String username, String password, String role, String name, String phone, String address, String registrationDate, String photoPath, byte[] photo) {
         this.userid = userId;
         this.username = username;
         this.password = password;
@@ -19,6 +21,8 @@ public class User {
         this.phone = phone;
         this.address = address;
         this.registrationDate = registrationDate;
+        this.photoPath = photoPath;
+        this.photo = photo;
     }
 
     public  int getUserid() {
@@ -54,6 +58,13 @@ public class User {
         return registrationDate;
     }
 
+    public String getPhotoPath() {
+        return photoPath;
+    }
+
+    public byte[] getPhoto() {
+        return photo;
+    }
 
     public void setUserId(int userId) {
         this.userid = userId;
@@ -85,5 +96,13 @@ public class User {
 
     public void setRegistrationDate(String registrationDate) {
         this.registrationDate = registrationDate;
+    }
+
+    public void setPhotoPath(String photoPath) {
+        this.photoPath = photoPath;
+    }
+
+    public void setPhoto(byte[] photo) {
+        this.photo = photo;
     }
 }
